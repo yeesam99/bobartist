@@ -3,7 +3,7 @@ import cors from 'cors';
 import { createServer } from 'http';
 import { Server, Socket } from 'socket.io';
 
-// BobArtist v0.0.29
+// BobArtist v0.0.30
 // DB 사용 없음: 방 상태와 업로드 이미지는 서버 메모리에만 저장합니다.
 
 type RoomState = 'lobby' | 'playing' | 'ended';
@@ -139,7 +139,7 @@ type PublicRoom = {
   updatedAt: number;
 };
 
-const VERSION = '0.0.29';
+const VERSION = '0.0.30';
 const PORT = Number(process.env.PORT || 3000);
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
 const CLIENT_ORIGINS = CLIENT_ORIGIN === '*'

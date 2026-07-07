@@ -1,105 +1,99 @@
-# BobArtist 배포 가이드 v0.0.29
+# BobArtist v0.0.30 배포 가이드
 
-## 배포 구조
-
-```text
-Client: Vercel
-Server: Render
-DB: 사용 안 함
-State: Server Memory + localStorage
-```
-
-## 1. GitHub 업로드
-
-프로젝트 루트 구조는 그대로 유지합니다.
+## 핵심 구조
 
 ```text
-BobArtist/
-├─ client/
-├─ server/
-├─ render.yaml
-├─ README.md
-├─ TEST.md
-└─ CHANGELOG.md
+GitHub
+├── server → Render
+└── client → Vercel
 ```
 
-## 2. Render 서버 배포
+DB는 사용하지 않습니다. 방 상태는 Render 서버 메모리에 저장됩니다.
+Render 무료 플랜은 서버가 잠들 수 있으므로 첫 접속이 느릴 수 있습니다.
 
-Render에서 `New Web Service`를 생성합니다.
+## 1. GitHub 반영
 
-수동 설정 시:
+기존 프로젝트 폴더에서 v0.0.30 파일로 교체한 뒤:
+
+```bash
+git add .
+git commit -m "v0.0.30 deployment stable"
+git push
+```
+
+## 2. Render 서버 설정
+
+Render > Web Service > bobartist 설정:
 
 ```text
 Root Directory: server
-Build Command: npm install && npm run build
+Build Command: npm install --registry=https://registry.npmjs.org && npm run build
 Start Command: npm start
 ```
 
-환경변수:
+Environment Variables:
 
 ```text
 NODE_VERSION=22
-CLIENT_ORIGIN=https://배포된-client주소.vercel.app
-```
-
-초기 테스트 중 CORS 확인이 번거로우면 임시로 아래처럼 둘 수 있습니다.
-
-```text
+NPM_CONFIG_REGISTRY=https://registry.npmjs.org/
 CLIENT_ORIGIN=*
 ```
 
-Render 배포 후 서버 주소 예시:
+처음 외부 테스트에서는 `CLIENT_ORIGIN=*`을 권장합니다.
+Vercel 주소가 확정되면 아래처럼 제한할 수 있습니다.
 
 ```text
-https://bobartist-server.onrender.com
+CLIENT_ORIGIN=https://your-bobartist-client.vercel.app
 ```
 
-브라우저에서 `/health` 접속 시 아래처럼 나오면 정상입니다.
+배포 후 확인:
 
-```json
-{ "ok": true, "version": "0.0.29" }
+```text
+https://YOUR_RENDER_SERVICE.onrender.com/health
 ```
 
-## 3. Vercel 클라이언트 배포
+## 3. Vercel 클라이언트 설정
 
-Vercel에서 GitHub 프로젝트를 Import합니다.
+Vercel > Add New Project > GitHub repo 선택:
 
 ```text
 Root Directory: client
-Framework: Vite
+Framework Preset: Vite
 Build Command: npm run build
 Output Directory: dist
 ```
 
-환경변수:
+Environment Variables:
 
 ```text
-VITE_SERVER_URL=https://배포된-render-server주소.onrender.com
+VITE_SERVER_URL=https://YOUR_RENDER_SERVICE.onrender.com
 ```
 
-예시:
+Vercel 배포 후 해당 URL을 친구에게 공유합니다.
+
+## 4. 배포 후 테스트
+
+1. Vercel URL 접속
+2. 방 생성
+3. 다른 브라우저/다른 사용자 입장
+4. Ready
+5. 게임 시작
+6. Focus Score 확인
+7. Result 후 Restart
+8. 술래 교대 확인
+
+## 5. Render에서 npm install이 멈출 때
+
+아래가 설정되어 있는지 확인합니다.
 
 ```text
-VITE_SERVER_URL=https://bobartist-server.onrender.com
+NPM_CONFIG_REGISTRY=https://registry.npmjs.org/
 ```
 
-## 4. 로컬 실행
-
-로컬에서는 기존 방식 그대로 실행합니다.
+Build Command도 아래처럼 공식 registry를 직접 지정합니다.
 
 ```bash
-npm run install:all
-npm run dev
+npm install --registry=https://registry.npmjs.org && npm run build
 ```
 
-`client/.env`를 사용하려면 `client/.env.example`을 복사해서 만듭니다.
-
-```bash
-cp client/.env.example client/.env
-```
-
-## 5. 주의사항
-
-- 서버는 DB를 사용하지 않으므로 Render 서버가 재시작되면 방 상태는 초기화됩니다.
-- 무료 Render 서버는 일정 시간 미사용 시 sleep 상태가 될 수 있습니다.
-- 외부 테스트 시 친구에게는 Vercel 클라이언트 주소만 공유하면 됩니다.
+기존에 내부 registry가 들어간 package-lock이 올라가 있으면 삭제 후 커밋하세요.

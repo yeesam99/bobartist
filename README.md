@@ -1,8 +1,6 @@
-# BobArtist v0.0.29
+# BobArtist v0.0.30
 
-v0.0.29는 `Deployment Ready` 버전입니다.
-
-기존 v0.0.28 게임 기능은 유지하면서, Render 서버 배포와 Vercel 클라이언트 배포를 쉽게 하기 위한 설정 파일과 문서를 추가했습니다.
+실시간 그림 숨바꼭질 게임 BobArtist입니다.
 
 ## 기술 스택
 
@@ -15,92 +13,86 @@ v0.0.29는 `Deployment Ready` 버전입니다.
 - DB 사용 안 함
 - localStorage + Server Memory
 
-## 실행 방법
+## v0.0.30 변경 목적
 
-처음 받은 ZIP이라면 의존성 설치가 필요합니다.
+v0.0.30은 새 게임 기능 추가가 아니라 **Deployment Stable** 버전입니다.
+Render/Vercel 배포 중 npm registry와 lock 파일 문제로 빌드가 멈추는 상황을 줄이기 위해 프로젝트 구조를 정리했습니다.
+
+## 로컬 실행
+
+최초 1회:
 
 ```bash
+npm install
 npm run install:all
 ```
 
-서버/클라이언트 동시 실행:
+실행:
 
 ```bash
 npm run dev
 ```
 
-개별 실행:
+위 명령 하나로 서버와 클라이언트가 동시에 실행됩니다.
+
+- Server: http://localhost:3000
+- Client: http://localhost:5173
+
+개별 실행도 가능합니다.
 
 ```bash
 npm run dev:server
 npm run dev:client
 ```
 
-## 빌드
+## 빌드 확인
+
+```bash
+npm run build
+```
+
+또는 개별 확인:
 
 ```bash
 npm run build:server
 npm run build:client
 ```
 
-## 배포
-
-배포 가이드는 `DEPLOY.md`를 확인합니다.
-
-요약:
+## 배포 구조
 
 ```text
-Server → Render
-Client → Vercel
+GitHub Repository
+├── server  → Render Web Service
+└── client  → Vercel Project
 ```
 
-추가된 파일:
+### Render 서버
 
-```text
-render.yaml
-client/vercel.json
-client/.env.example
-server/.env.example
-DEPLOY.md
+- Root Directory: `server`
+- Build Command: `npm install --registry=https://registry.npmjs.org && npm run build`
+- Start Command: `npm start`
+- Environment Variables:
+  - `NODE_VERSION=22`
+  - `NPM_CONFIG_REGISTRY=https://registry.npmjs.org/`
+  - `CLIENT_ORIGIN=*` initially
+
+### Vercel 클라이언트
+
+- Root Directory: `client`
+- Framework: Vite
+- Build Command: `npm run build`
+- Output Directory: `dist`
+- Environment Variable:
+  - `VITE_SERVER_URL=https://YOUR_RENDER_SERVICE.onrender.com`
+
+## npm install 필요 여부
+
+v0.0.30은 package-lock과 node_modules를 정리한 배포 안정화 버전입니다.
+새 ZIP으로 받은 경우 반드시 아래를 실행하세요.
+
+```bash
+npm install
+npm run install:all
 ```
 
-## v0.0.29 변경 사항
-
-- Render 배포용 `render.yaml` 추가
-- Vercel 배포용 `client/vercel.json` 추가
-- 서버 `/health` 확인 API 추가
-- 서버 CORS 설정을 `CLIENT_ORIGIN` 환경변수 기반으로 정리
-- 클라이언트 서버 주소 설정 예시 `client/.env.example` 추가
-- 서버 환경변수 예시 `server/.env.example` 추가
-- 배포 가이드 `DEPLOY.md` 추가
-- 새 패키지 추가 없음
-
-## 게임 흐름
-
-```text
-LOBBY
-↓
-READY
-↓
-GAME START
-↓
-DECORATE
-↓
-SUBMIT
-↓
-REVEAL
-↓
-FIND
-↓
-RESULT
-↓
-RESTART
-↓
-ROLE ROTATION
-↓
-DECORATE
-```
-
-## 주의
-
-BobArtist는 DB를 사용하지 않습니다. Render 서버가 재시작되면 방 상태는 초기화됩니다.
+기존 프로젝트 위에 덮어쓴 경우에도 dependency 구조 확인을 위해 한 번 실행하는 것을 권장합니다.

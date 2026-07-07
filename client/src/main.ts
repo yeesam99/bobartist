@@ -104,7 +104,7 @@ const STORAGE_KEYS = {
 } as const;
 
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3000';
-const VERSION = '0.0.28';
+const VERSION = '0.0.30';
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/jpg'];
 
@@ -289,7 +289,7 @@ app.innerHTML = `
             </div>
           </div>
 
-          <p class="hint">v0.0.28은 Focus Score를 그림 상단 한 줄로 표시하고, 확대/축소 단축키를 Shift + Wheel로 변경합니다.</p>
+          <p class="hint">v0.0.30은 배포 안정화 버전입니다. 로컬에서는 npm run dev, 외부 테스트는 Render/Vercel 배포를 사용합니다.</p>
         </aside>
       </section>
     </section>

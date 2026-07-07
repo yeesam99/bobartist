@@ -1,92 +1,75 @@
-# TEST v0.0.29
+# TEST.md
 
-## 설치
+## v0.0.30 로컬 테스트
 
-기존 v0.0.28 설치 상태라면 새 패키지는 없으므로 `npm install`은 불필요합니다.
-새 ZIP에서 처음 실행한다면 아래 명령을 실행합니다.
+### 1. 설치
 
 ```bash
+npm install
 npm run install:all
 ```
 
-## 실행
+### 2. 통합 실행
 
 ```bash
 npm run dev
 ```
 
-## 빌드 확인
+확인:
+
+- Server: http://localhost:3000/health
+- Client: http://localhost:5173
+
+### 3. 빌드
 
 ```bash
-npm run build:server
-npm run build:client
+npm run build
 ```
 
-## 로컬 기능 회귀 테스트
+성공 기준:
 
-1. 방장이 이미지 업로드 후 방 생성
-2. 참가자 입장
-3. 참가자 Ready
-4. 방장 게임 시작
-5. DECORATE → SUBMIT → REVEAL → FIND → RESULT 진행
-6. 다시 시작 후 술래 변경 확인
+- server TypeScript build 성공
+- client TypeScript/Vite build 성공
 
-기대 결과:
+## 게임 기능 회귀 테스트
 
-- v0.0.28의 게임 흐름이 그대로 유지된다.
-- Focus Score는 그림 상단 툴바에 통합 점수 1개로 표시된다.
-- `Shift + Mouse Wheel` 확대/축소가 정상 동작한다.
+1. 브라우저 2개 접속
+2. 방 생성
+3. 방 입장
+4. 참가자 Ready
+5. 게임 시작
+6. Artist 그림/원 숨기기
+7. Reveal
+8. Find
+9. Focus Score 표시 확인
+   - Artist: 실시간 통합 점수 표시
+   - Spy: 10초마다 통합 점수 표시
+10. Spotlight
+11. Result
+12. Restart
+13. 술래가 다음 플레이어로 교대되는지 확인
+14. 3회 이상 반복해도 Canvas/원/역할/점수가 꼬이지 않는지 확인
 
-## 서버 Health Check
+## Render 테스트
 
-서버 실행 후 브라우저에서 확인합니다.
+Render 배포 후:
 
 ```text
-http://localhost:3000/health
+https://YOUR_RENDER_SERVICE.onrender.com/health
 ```
 
-기대 결과:
+응답 예시:
 
 ```json
-{ "ok": true, "version": "0.0.29" }
+{ "ok": true, "version": "0.0.30" }
 ```
 
-## Render 배포 테스트
+## Vercel 테스트
 
-1. Render에 서버 배포
-2. Render 환경변수 설정
+Vercel 환경변수:
 
 ```text
-NODE_VERSION=22
-CLIENT_ORIGIN=https://배포된-client주소.vercel.app
+VITE_SERVER_URL=https://YOUR_RENDER_SERVICE.onrender.com
 ```
 
-3. Render 서버 `/health` 접속
-
-기대 결과:
-
-- `{ "ok": true, "version": "0.0.29" }` 응답
-
-## Vercel 배포 테스트
-
-1. Vercel Root Directory를 `client`로 설정
-2. 환경변수 설정
-
-```text
-VITE_SERVER_URL=https://배포된-render-server주소.onrender.com
-```
-
-3. Vercel 배포 주소 접속
-4. 방 생성/입장 테스트
-
-기대 결과:
-
-- 외부 사용자가 Vercel 주소로 접속할 수 있다.
-- Socket.IO가 Render 서버와 연결된다.
-- 방 생성/입장/Ready/게임 시작이 정상 동작한다.
-
-## 외부 테스트 체크리스트
-
-- 친구에게는 Vercel 클라이언트 주소만 공유한다.
-- 서버가 sleep 상태였다면 첫 접속이 느릴 수 있다.
-- 방 상태는 서버 메모리이므로 서버 재시작 시 초기화된다.
+Vercel 접속 후 방 생성/입장/게임 시작까지 확인합니다.

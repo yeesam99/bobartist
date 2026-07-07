@@ -1,8 +1,8 @@
 {
   "name": "bobartist",
-  "version": "0.0.29",
+  "version": "0.0.30",
   "private": true,
-  "description": "BobArtist real-time room prototype",
+  "description": "BobArtist real-time hide-and-find drawing game",
   "engines": {
     "node": ">=22"
   },
@@ -11,8 +11,10 @@
     "dev": "concurrently -n SERVER,CLIENT -c auto \"npm run dev --prefix server\" \"npm run dev --prefix client\"",
     "dev:server": "npm run dev --prefix server",
     "dev:client": "npm run dev --prefix client",
+    "build": "npm run build:server && npm run build:client",
     "build:server": "npm run build --prefix server",
-    "build:client": "npm run build --prefix client"
+    "build:client": "npm run build --prefix client",
+    "start:server": "npm start --prefix server"
   },
   "devDependencies": {
     "concurrently": "^9.2.1"

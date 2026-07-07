@@ -4,10 +4,12 @@ services:
     env: node
     rootDir: server
     plan: free
-    buildCommand: npm install && npm run build
+    buildCommand: npm install --registry=https://registry.npmjs.org && npm run build
     startCommand: npm start
     envVars:
       - key: NODE_VERSION
         value: 22
+      - key: NPM_CONFIG_REGISTRY
+        value: https://registry.npmjs.org/
       - key: CLIENT_ORIGIN
-        value: https://your-bobartist-client.vercel.app
+        value: '*'
