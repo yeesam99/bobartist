@@ -1,6 +1,6 @@
 # TEST.md
 
-## v0.0.31 로컬 테스트
+## v0.0.32 로컬 테스트
 
 ### 1. 설치
 
@@ -82,3 +82,11 @@ VITE_SERVER_URL=https://YOUR_RENDER_SERVICE.onrender.com
 ```
 
 Vercel 접속 후 방 생성/입장/게임 시작까지 확인합니다.
+
+
+## v0.0.32 Circle Edge Test
+
+- In FIND, confirm the hidden circle no longer shows a thick white outer ring.
+- Confirm the artist guide ring still only appears when explicitly toggled and never appears to the spy.
+- Confirm zoom levels 50%, 100%, and 200% do not make the circle edge visibly thicker.
+- Confirm Focus Score and round restart still work after the rendering change.

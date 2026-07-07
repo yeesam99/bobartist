@@ -685,45 +685,50 @@ function drawBackgroundOnly(ctx: CanvasRenderingContext2D): void {
   ctx.fillText('원본 이미지를 불러오는 중입니다.', 48, 72);
 }
 
-function prepareCleanCircleEdge(ctx: CanvasRenderingContext2D, color: string): void {
+function prepareCleanCircleFill(ctx: CanvasRenderingContext2D): void {
   ctx.globalCompositeOperation = 'source-over';
   ctx.shadowBlur = 0;
   ctx.shadowColor = 'transparent';
   ctx.setLineDash([]);
-  ctx.lineWidth = 2;
-  ctx.lineJoin = 'round';
-  ctx.lineCap = 'round';
-  ctx.strokeStyle = color;
+}
+
+function snapCirclePoint(value: number): number {
+  // Keep the filled circle aligned to device pixels without adding a visible stroke.
+  return Math.round(value);
 }
 
 function drawSolidCircleBase(ctx: CanvasRenderingContext2D, x: number, y: number, radius: number, color: string): void {
-  // Canvas clip anti-aliasing can leave a faint 1px ring on dark artwork.
-  // Fill/stroke with the same color first so the circle edge is fully sealed.
+  // Do not stroke the hidden circle. A same-color stroke can look like a thick white ring.
+  // Pixel-snapped fill keeps the edge cleaner while preserving the no-guide rule for the spy.
+  const px = snapCirclePoint(x);
+  const py = snapCirclePoint(y);
+
   ctx.save();
-  prepareCleanCircleEdge(ctx, color);
+  prepareCleanCircleFill(ctx);
   ctx.fillStyle = color;
   ctx.beginPath();
-  ctx.arc(x, y, radius, 0, Math.PI * 2);
+  ctx.arc(px, py, radius, 0, Math.PI * 2);
   ctx.fill();
-  ctx.stroke();
   ctx.restore();
 }
 
 function drawCharacter(ctx: CanvasRenderingContext2D): void {
   const { x, y, radius } = character;
+  const px = snapCirclePoint(x);
+  const py = snapCirclePoint(y);
   const baseColor = character.baseColor || '#FFFFFF';
 
-  drawSolidCircleBase(ctx, x, y, radius, baseColor);
+  drawSolidCircleBase(ctx, px, py, radius, baseColor);
 
   ctx.save();
   ctx.globalCompositeOperation = 'source-over';
   ctx.shadowBlur = 0;
   ctx.shadowColor = 'transparent';
   ctx.beginPath();
-  ctx.arc(x, y, radius, 0, Math.PI * 2);
+  ctx.arc(px, py, radius, 0, Math.PI * 2);
   ctx.clip();
 
-  ctx.drawImage(paintCanvas, x - radius, y - radius, radius * 2, radius * 2);
+  ctx.drawImage(paintCanvas, px - radius, py - radius, radius * 2, radius * 2);
   ctx.restore();
 
   // 기본 가장자리는 base fill/stroke에서만 처리합니다.
@@ -802,19 +807,21 @@ function drawSubmission(
   showHiddenGuide: boolean
 ): void {
   const { x, y, radius } = getSubmissionCircle(submission);
+  const px = snapCirclePoint(x);
+  const py = snapCirclePoint(y);
   const image = getSubmissionImage(submission);
 
   const baseColor = submission.character.baseColor || '#FFFFFF';
-  drawSolidCircleBase(ctx, x, y, radius, baseColor);
+  drawSolidCircleBase(ctx, px, py, radius, baseColor);
 
   ctx.save();
   ctx.globalCompositeOperation = 'source-over';
   ctx.shadowBlur = 0;
   ctx.shadowColor = 'transparent';
   ctx.beginPath();
-  ctx.arc(x, y, radius, 0, Math.PI * 2);
+  ctx.arc(px, py, radius, 0, Math.PI * 2);
   ctx.clip();
-  if (image) ctx.drawImage(image, x - radius, y - radius, radius * 2, radius * 2);
+  if (image) ctx.drawImage(image, px - radius, py - radius, radius * 2, radius * 2);
   ctx.restore();
 
   // FIND 단계에서는 술래가 실제로 숨은 원을 찾아야 하므로

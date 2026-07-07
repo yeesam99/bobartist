@@ -1,4 +1,4 @@
-# BobArtist v0.0.31
+# BobArtist v0.0.32
 
 실시간 그림 숨바꼭질 게임 BobArtist입니다.
 
@@ -13,9 +13,9 @@
 - DB 사용 안 함
 - localStorage + Server Memory
 
-## v0.0.31 변경 목적
+## v0.0.32 변경 목적
 
-v0.0.31은 **Circle Render Fix** 버전입니다.
+v0.0.32은 **Circle Render Fix** 버전입니다.
 게임 중 원 가장자리에 희미한 테두리처럼 보이는 현상을 줄이기 위해 Canvas 원 렌더링 방식을 정리했습니다.
 
 배포 구조는 v0.0.30 Deployment Stable 구조를 유지합니다.
@@ -98,3 +98,8 @@ npm run install:all
 ```
 
 기존 프로젝트 위에 덮어쓴 경우에도 dependency 구조 확인을 위해 한 번 실행하는 것을 권장합니다.
+
+
+## v0.0.32 Circle Render Edge Rollback
+
+Hidden-circle rendering no longer uses a same-color stroke. The circle is drawn with pixel-snapped fill/clip coordinates to avoid the thick white ring seen during online testing.

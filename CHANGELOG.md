@@ -1,6 +1,14 @@
 # CHANGELOG
 
-## v0.0.31 - Circle Render Fix
+## v0.0.32 - Circle Render Edge Rollback
+
+- Removed the same-color stroke added in v0.0.31 because it could make the hidden circle edge look thicker.
+- Kept shadow/composite cleanup for stable Canvas rendering.
+- Added pixel snapping for circle fill/clip positions to reduce edge shimmer without exposing a guide ring.
+- The spy guide-ring prohibition remains unchanged.
+
+
+## v0.0.32 - Circle Render Fix
 
 - 원 가장자리의 희미한 테두리/잔상 완화
 - Canvas 원 렌더링을 `fill + same-color stroke` 기반으로 정리
