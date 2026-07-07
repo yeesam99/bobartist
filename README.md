@@ -1,4 +1,4 @@
-# BobArtist v0.0.30
+# BobArtist v0.0.31
 
 실시간 그림 숨바꼭질 게임 BobArtist입니다.
 
@@ -13,10 +13,12 @@
 - DB 사용 안 함
 - localStorage + Server Memory
 
-## v0.0.30 변경 목적
+## v0.0.31 변경 목적
 
-v0.0.30은 새 게임 기능 추가가 아니라 **Deployment Stable** 버전입니다.
-Render/Vercel 배포 중 npm registry와 lock 파일 문제로 빌드가 멈추는 상황을 줄이기 위해 프로젝트 구조를 정리했습니다.
+v0.0.31은 **Circle Render Fix** 버전입니다.
+게임 중 원 가장자리에 희미한 테두리처럼 보이는 현상을 줄이기 위해 Canvas 원 렌더링 방식을 정리했습니다.
+
+배포 구조는 v0.0.30 Deployment Stable 구조를 유지합니다.
 
 ## 로컬 실행
 

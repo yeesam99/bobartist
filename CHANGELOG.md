@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## v0.0.31 - Circle Render Fix
+
+- 원 가장자리의 희미한 테두리/잔상 완화
+- Canvas 원 렌더링을 `fill + same-color stroke` 기반으로 정리
+- `shadowBlur`, `shadowColor`, `globalCompositeOperation` 초기화로 잔상 가능성 축소
+- 제출된 원 렌더링에도 동일한 기본 원 마감 처리 적용
+- 술래 화면에서는 기존처럼 별도 가이드 테두리 표시 금지 유지
+- 새 패키지 추가 없음
+
 ## v0.0.30 - Deployment Stable
 
 - 새 게임 기능 추가 없음

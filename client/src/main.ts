@@ -685,25 +685,54 @@ function drawBackgroundOnly(ctx: CanvasRenderingContext2D): void {
   ctx.fillText('원본 이미지를 불러오는 중입니다.', 48, 72);
 }
 
+function prepareCleanCircleEdge(ctx: CanvasRenderingContext2D, color: string): void {
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.shadowBlur = 0;
+  ctx.shadowColor = 'transparent';
+  ctx.setLineDash([]);
+  ctx.lineWidth = 2;
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = color;
+}
+
+function drawSolidCircleBase(ctx: CanvasRenderingContext2D, x: number, y: number, radius: number, color: string): void {
+  // Canvas clip anti-aliasing can leave a faint 1px ring on dark artwork.
+  // Fill/stroke with the same color first so the circle edge is fully sealed.
+  ctx.save();
+  prepareCleanCircleEdge(ctx, color);
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(x, y, radius, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+}
+
 function drawCharacter(ctx: CanvasRenderingContext2D): void {
   const { x, y, radius } = character;
+  const baseColor = character.baseColor || '#FFFFFF';
+
+  drawSolidCircleBase(ctx, x, y, radius, baseColor);
 
   ctx.save();
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.shadowBlur = 0;
+  ctx.shadowColor = 'transparent';
   ctx.beginPath();
   ctx.arc(x, y, radius, 0, Math.PI * 2);
   ctx.clip();
 
-  // 얼굴/그림자 없이 흰색 원형 마스크로 시작합니다.
-  ctx.fillStyle = character.baseColor;
-  ctx.beginPath();
-  ctx.arc(x, y, radius, 0, Math.PI * 2);
-  ctx.fill();
-
   ctx.drawImage(paintCanvas, x - radius, y - radius, radius * 2, radius * 2);
   ctx.restore();
 
+  // 기본 가장자리는 base fill/stroke에서만 처리합니다.
+  // 별도 stroke를 추가하지 않아 술래 화면에 테두리 힌트가 생기지 않게 합니다.
   if (showCharacterGuide) {
     ctx.save();
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.shadowBlur = 0;
+    ctx.shadowColor = 'transparent';
     ctx.setLineDash([8, 6]);
     ctx.lineWidth = 2;
     ctx.strokeStyle = 'rgba(47, 38, 29, 0.82)';
@@ -775,12 +804,16 @@ function drawSubmission(
   const { x, y, radius } = getSubmissionCircle(submission);
   const image = getSubmissionImage(submission);
 
+  const baseColor = submission.character.baseColor || '#FFFFFF';
+  drawSolidCircleBase(ctx, x, y, radius, baseColor);
+
   ctx.save();
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.shadowBlur = 0;
+  ctx.shadowColor = 'transparent';
   ctx.beginPath();
   ctx.arc(x, y, radius, 0, Math.PI * 2);
   ctx.clip();
-  ctx.fillStyle = submission.character.baseColor || '#FFFFFF';
-  ctx.fillRect(x - radius, y - radius, radius * 2, radius * 2);
   if (image) ctx.drawImage(image, x - radius, y - radius, radius * 2, radius * 2);
   ctx.restore();
 
