@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## v0.0.33 - Circle Render Engine
+
+- 술래 REVEAL/FIND 화면에서 제출 원의 `baseColor` 원판을 그리지 않도록 분리
+- 일반 렌더링과 술래 렌더링을 `drawHardClippedCircleImage` / `drawSpySafeCircleImage`로 분리
+- 술래 렌더링은 외곽 알파를 안쪽으로 feather 처리하여 clip/drawImage 경계가 테두리처럼 보이지 않도록 수정
+- 아티스트/결과 화면의 원 표시와 선택 결과 테두리는 유지
+- 새 패키지 추가 없음
+
 ## v0.0.32 - Circle Render Edge Rollback
 
 - Removed the same-color stroke added in v0.0.31 because it could make the hidden circle edge look thicker.

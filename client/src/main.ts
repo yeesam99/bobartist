@@ -104,9 +104,11 @@ const STORAGE_KEYS = {
 } as const;
 
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3000';
-const VERSION = '0.0.30';
+const VERSION = '0.0.33';
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/jpg'];
+const SPY_CIRCLE_EDGE_FEATHER_PX = 5;
+const SPY_CIRCLE_EDGE_GUARD_PX = 1.25;
 
 const app = document.querySelector<HTMLDivElement>('#app');
 if (!app) throw new Error('#app element not found');
@@ -698,8 +700,7 @@ function snapCirclePoint(value: number): number {
 }
 
 function drawSolidCircleBase(ctx: CanvasRenderingContext2D, x: number, y: number, radius: number, color: string): void {
-  // Do not stroke the hidden circle. A same-color stroke can look like a thick white ring.
-  // Pixel-snapped fill keeps the edge cleaner while preserving the no-guide rule for the spy.
+  // Artist/public rendering may show the body of the character, but it must never add a stroke.
   const px = snapCirclePoint(x);
   const py = snapCirclePoint(y);
 
@@ -712,6 +713,67 @@ function drawSolidCircleBase(ctx: CanvasRenderingContext2D, x: number, y: number
   ctx.restore();
 }
 
+function drawHardClippedCircleImage(
+  ctx: CanvasRenderingContext2D,
+  image: CanvasImageSource,
+  x: number,
+  y: number,
+  radius: number
+): void {
+  ctx.save();
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.shadowBlur = 0;
+  ctx.shadowColor = 'transparent';
+  ctx.setLineDash([]);
+  ctx.beginPath();
+  ctx.arc(x, y, radius, 0, Math.PI * 2);
+  ctx.clip();
+  ctx.drawImage(image, x - radius, y - radius, radius * 2, radius * 2);
+  ctx.restore();
+}
+
+function drawSpySafeCircleImage(
+  ctx: CanvasRenderingContext2D,
+  image: CanvasImageSource,
+  x: number,
+  y: number,
+  radius: number
+): void {
+  // Spy rendering intentionally removes the circle shell.
+  // No base fill is drawn, and the outer alpha is feathered inward so clip antialiasing
+  // or brush pixels cut at the exact circle boundary cannot appear as a hidden outline.
+  const safeRadius = Math.max(0, radius - SPY_CIRCLE_EDGE_GUARD_PX);
+  const feather = Math.min(SPY_CIRCLE_EDGE_FEATHER_PX, Math.max(1, safeRadius * 0.18));
+  const pad = Math.ceil(feather + SPY_CIRCLE_EDGE_GUARD_PX + 1);
+  const size = Math.ceil(radius * 2 + pad * 2);
+  const buffer = document.createElement('canvas');
+  buffer.width = size;
+  buffer.height = size;
+
+  const bufferCtx = buffer.getContext('2d');
+  if (!bufferCtx) return;
+
+  bufferCtx.clearRect(0, 0, size, size);
+  bufferCtx.drawImage(image, pad, pad, radius * 2, radius * 2);
+
+  const center = size / 2;
+  const mask = bufferCtx.createRadialGradient(center, center, Math.max(0, safeRadius - feather), center, center, safeRadius);
+  mask.addColorStop(0, 'rgba(0,0,0,1)');
+  mask.addColorStop(1, 'rgba(0,0,0,0)');
+
+  bufferCtx.globalCompositeOperation = 'destination-in';
+  bufferCtx.fillStyle = mask;
+  bufferCtx.fillRect(0, 0, size, size);
+  bufferCtx.globalCompositeOperation = 'source-over';
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.shadowBlur = 0;
+  ctx.shadowColor = 'transparent';
+  ctx.drawImage(buffer, x - radius - pad, y - radius - pad);
+  ctx.restore();
+}
+
 function drawCharacter(ctx: CanvasRenderingContext2D): void {
   const { x, y, radius } = character;
   const px = snapCirclePoint(x);
@@ -720,16 +782,7 @@ function drawCharacter(ctx: CanvasRenderingContext2D): void {
 
   drawSolidCircleBase(ctx, px, py, radius, baseColor);
 
-  ctx.save();
-  ctx.globalCompositeOperation = 'source-over';
-  ctx.shadowBlur = 0;
-  ctx.shadowColor = 'transparent';
-  ctx.beginPath();
-  ctx.arc(px, py, radius, 0, Math.PI * 2);
-  ctx.clip();
-
-  ctx.drawImage(paintCanvas, px - radius, py - radius, radius * 2, radius * 2);
-  ctx.restore();
+  drawHardClippedCircleImage(ctx, paintCanvas, px, py, radius);
 
   // 기본 가장자리는 base fill/stroke에서만 처리합니다.
   // 별도 stroke를 추가하지 않아 술래 화면에 테두리 힌트가 생기지 않게 합니다.
@@ -804,25 +857,21 @@ function drawSubmission(
   ctx: CanvasRenderingContext2D,
   submission: ArtworkSubmission,
   selected: boolean,
-  showHiddenGuide: boolean
+  showHiddenGuide: boolean,
+  hideCircleShell: boolean
 ): void {
   const { x, y, radius } = getSubmissionCircle(submission);
   const px = snapCirclePoint(x);
   const py = snapCirclePoint(y);
   const image = getSubmissionImage(submission);
 
-  const baseColor = submission.character.baseColor || '#FFFFFF';
-  drawSolidCircleBase(ctx, px, py, radius, baseColor);
-
-  ctx.save();
-  ctx.globalCompositeOperation = 'source-over';
-  ctx.shadowBlur = 0;
-  ctx.shadowColor = 'transparent';
-  ctx.beginPath();
-  ctx.arc(px, py, radius, 0, Math.PI * 2);
-  ctx.clip();
-  if (image) ctx.drawImage(image, px - radius, py - radius, radius * 2, radius * 2);
-  ctx.restore();
+  if (hideCircleShell) {
+    if (image) drawSpySafeCircleImage(ctx, image, px, py, radius);
+  } else {
+    const baseColor = submission.character.baseColor || '#FFFFFF';
+    drawSolidCircleBase(ctx, px, py, radius, baseColor);
+    if (image) drawHardClippedCircleImage(ctx, image, px, py, radius);
+  }
 
   // FIND 단계에서는 술래가 실제로 숨은 원을 찾아야 하므로
   // 선택 전 점선 가이드를 표시하지 않습니다.
@@ -936,8 +985,9 @@ function renderGameCanvas(): void {
       const selected = currentRoom?.game?.selectedTargetId === submission.playerId;
       // 술래에게는 REVEAL/FIND 중 숨은 원의 점선 가이드를 절대 보여주지 않습니다.
       // RESULT에서는 선택 결과 확인용 테두리만 표시합니다.
+      const hideCircleShell = isSpy && (phase === 'reveal' || phase === 'find');
       const showHiddenGuide = phase === 'result' || (!isSpy && phase === 'reveal');
-      drawSubmission(gameCtx, submission, selected, showHiddenGuide);
+      drawSubmission(gameCtx, submission, selected, showHiddenGuide, hideCircleShell);
     });
   } else if (isArtistPlayer()) {
     drawCharacter(gameCtx);
