@@ -1,0 +1,20 @@
+{
+  "name": "bobartist",
+  "version": "0.0.29",
+  "private": true,
+  "description": "BobArtist real-time room prototype",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "install:all": "npm install --prefix server && npm install --prefix client",
+    "dev": "concurrently -n SERVER,CLIENT -c auto \"npm run dev --prefix server\" \"npm run dev --prefix client\"",
+    "dev:server": "npm run dev --prefix server",
+    "dev:client": "npm run dev --prefix client",
+    "build:server": "npm run build --prefix server",
+    "build:client": "npm run build --prefix client"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}

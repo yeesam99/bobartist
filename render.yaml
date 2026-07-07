@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: bobartist-server
+    env: node
+    rootDir: server
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: CLIENT_ORIGIN
+        value: https://your-bobartist-client.vercel.app
