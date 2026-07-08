@@ -35,6 +35,7 @@ type ArtworkSubmission = {
   character: CharacterSnapshot;
   paintDataUrl: string;
   submittedAt: number;
+  caught?: boolean;
 };
 
 type FindResult = {
@@ -58,6 +59,7 @@ type PublicRoom = {
     phaseStartedAt: number;
     artwork: Artwork;
     submissions: ArtworkSubmission[];
+    caughtTargetIds: string[];
     selectedTargetId: string | null;
     result: FindResult | null;
   };
@@ -491,7 +493,7 @@ function getPhaseMessage(phase?: GamePhase): string {
   if (phase === 'submit') return '다른 플레이어의 제출을 기다리는 중입니다.';
   if (phase === 'reveal') return '제출 완료. 모든 도망자의 원이 공개되고 술래가 찾기를 준비합니다.';
   if (phase === 'find') return '술래가 제한 시간 안에 도망자의 원을 선택하는 단계입니다.';
-  if (phase === 'result') return '결과 단계입니다. 시간 초과면 도망자 승리, 원을 찾으면 술래 승리입니다.';
+  if (phase === 'result') return '결과 단계입니다. 시간 초과면 도망자 승리, 모든 도망자를 잡으면 술래 승리입니다.';
   return '게임 상태를 준비하고 있습니다.';
 }
 
@@ -961,12 +963,39 @@ function getSubmissionAtPoint(point: { x: number; y: number }): ArtworkSubmissio
   const submissions = currentRoom?.game?.submissions || [];
   for (let index = submissions.length - 1; index >= 0; index -= 1) {
     const submission = submissions[index];
+    if (submission.caught || currentRoom?.game?.caughtTargetIds.includes(submission.playerId)) continue;
     const circle = getSubmissionCircle(submission);
     const dx = point.x - circle.x;
     const dy = point.y - circle.y;
     if (dx * dx + dy * dy <= circle.radius * circle.radius) return submission;
   }
   return null;
+}
+
+
+function isSubmissionCaught(submission: ArtworkSubmission): boolean {
+  return Boolean(submission.caught || currentRoom?.game?.caughtTargetIds.includes(submission.playerId));
+}
+
+function drawCaughtMark(ctx: CanvasRenderingContext2D, submission: ArtworkSubmission): void {
+  const { x, y, radius } = getSubmissionCircle(submission);
+  const markRadius = radius * 0.58;
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.shadowBlur = 0;
+  ctx.shadowColor = 'transparent';
+  ctx.setLineDash([]);
+  ctx.lineWidth = Math.max(4, radius * 0.08);
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = 'rgba(202, 57, 57, 0.96)';
+  ctx.beginPath();
+  ctx.moveTo(x - markRadius, y - markRadius);
+  ctx.lineTo(x + markRadius, y + markRadius);
+  ctx.moveTo(x + markRadius, y - markRadius);
+  ctx.lineTo(x - markRadius, y + markRadius);
+  ctx.stroke();
+  ctx.restore();
 }
 
 function renderGameCanvas(): void {
@@ -991,6 +1020,7 @@ function renderGameCanvas(): void {
       const hideCircleShell = isSpy && (phase === 'reveal' || phase === 'find');
       const showHiddenGuide = phase === 'result' || (!isSpy && phase === 'reveal');
       drawSubmission(gameCtx, submission, selected, showHiddenGuide, hideCircleShell);
+      if (isSubmissionCaught(submission)) drawCaughtMark(gameCtx, submission);
     });
   } else if (isArtistPlayer()) {
     drawCharacter(gameCtx);
@@ -1272,17 +1302,25 @@ function renderGameRoom(room: PublicRoom): void {
 
   submitArtworkButton.disabled = !canSubmit || Boolean(me?.submitted);
   submitArtworkButton.textContent = isSpy ? '술래 대기 중' : (me?.submitted ? '제출 완료' : '제출');
-  confirmFindButton.disabled = !canFind || !room.game?.selectedTargetId;
+  confirmFindButton.disabled = true;
   restartGameButton.disabled = !canRestart;
+  confirmFindButton.textContent = phase === 'find' ? '클릭하면 잡힘 처리' : '찾기 단계 대기';
   restartGameButton.textContent = canRestart ? '다시 시작' : 'RESULT 후 다시 시작';
   if (phase !== 'find') resetFocusScores();
   renderFocusScores();
 
   if (phase === 'result' && room.game?.result) {
     submitStatusView.textContent = room.game.result.success ? `🎯 술래 승리: ${room.game.result.message}` : `🏃 도망자 승리: ${room.game.result.message}`;
-  } else if (phase === 'find' && room.game?.selectedTargetId) {
-    const selected = room.players.find((player) => player.id === room.game?.selectedTargetId);
-    submitStatusView.textContent = `선택됨: ${selected?.name || '알 수 없음'} · 선택 확정을 누르세요.`;
+  } else if (phase === 'find') {
+    const caughtIds = room.game?.caughtTargetIds || [];
+    const runnerCount = room.players.filter((player) => player.role === 'artist').length;
+    const caughtNames = room.players
+      .filter((player) => caughtIds.includes(player.id))
+      .map((player) => player.name)
+      .join(', ');
+    submitStatusView.textContent = caughtIds.length > 0
+      ? `잡힌 도망자: ${caughtIds.length}/${runnerCount}명${caughtNames ? ` (${caughtNames})` : ''} · 남은 도망자를 계속 찾으세요.`
+      : `도망자 0/${runnerCount}명 잡힘 · 숨은 원을 클릭하면 바로 잡힘 처리됩니다.`;
   } else {
     submitStatusView.textContent = room.players
       .map((player) => `${player.name}: ${player.role === 'spy' ? '술래 대기 중' : player.submitted ? '제출 완료' : '작성 중'}`)
@@ -1534,7 +1572,7 @@ gameCanvas.addEventListener('pointerdown', (event) => {
     if (target) {
       socket?.emit('find_target', { targetId: target.playerId });
     } else {
-      updateToolHint('마우스 포인터로 숨은 원 내부를 클릭해 주세요. 클릭 성공 시 바로 결과로 이동합니다.');
+      updateToolHint('마우스 포인터로 아직 잡히지 않은 도망자 원 내부를 클릭해 주세요.');
       renderGameCanvas();
     }
     return;

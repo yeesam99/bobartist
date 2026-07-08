@@ -3,7 +3,7 @@ import cors from 'cors';
 import { createServer } from 'http';
 import { Server, Socket } from 'socket.io';
 
-// BobArtist v0.0.38
+// BobArtist v0.0.39
 // DB 사용 없음: 방 상태와 업로드 이미지는 서버 메모리에만 저장합니다.
 
 type RoomState = 'lobby' | 'playing' | 'ended';
@@ -78,6 +78,7 @@ type Room = {
   artwork: Artwork;
   game: GameRound | null;
   submissions: Record<string, ArtworkSubmission>;
+  caughtTargetIds: string[];
   selectedTargetId: string | null;
   result: FindResult | null;
   focusScores: Record<string, number>;
@@ -131,7 +132,8 @@ type PublicRoom = {
     startedAt: number;
     phaseStartedAt: number;
     artwork: Artwork;
-    submissions: ArtworkSubmission[];
+    submissions: Array<ArtworkSubmission & { caught: boolean }>;
+    caughtTargetIds: string[];
     selectedTargetId: string | null;
     result: FindResult | null;
   };
@@ -139,7 +141,7 @@ type PublicRoom = {
   updatedAt: number;
 };
 
-const VERSION = '0.0.38';
+const VERSION = '0.0.39';
 const PORT = Number(process.env.PORT || 3000);
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
 const CLIENT_ORIGINS = CLIENT_ORIGIN === '*'
@@ -278,6 +280,7 @@ function assignRoles(room: Room): void {
     };
   });
   room.submissions = {};
+  room.caughtTargetIds = [];
   room.selectedTargetId = null;
   room.result = null;
   room.focusScores = {};
@@ -358,7 +361,11 @@ function toPublicRoom(room: Room): PublicRoom {
           startedAt: room.game.startedAt,
           phaseStartedAt: room.game.phaseStartedAt,
           artwork: room.game.artwork,
-          submissions: Object.values(room.submissions),
+          submissions: Object.values(room.submissions).map((submission) => ({
+            ...submission,
+            caught: room.caughtTargetIds.includes(submission.playerId)
+          })),
+          caughtTargetIds: [...room.caughtTargetIds],
           selectedTargetId: room.selectedTargetId,
           result: room.result
         }
@@ -408,6 +415,7 @@ function leaveJoinedRooms(socket: Socket): void {
       room.state = 'lobby';
       room.game = null;
       room.submissions = {};
+      room.caughtTargetIds = [];
       room.selectedTargetId = null;
       room.result = null;
       room.focusScores = {};
@@ -598,6 +606,23 @@ function submitArtwork(socket: Socket, payload: { character?: unknown; paintData
   emitRoomState(room);
 }
 
+
+function getRunnerIds(room: Room): string[] {
+  return room.players
+    .filter((player) => player.role === 'artist')
+    .map((player) => player.socketId);
+}
+
+function getCaughtRunnerCount(room: Room): number {
+  const runnerIds = new Set(getRunnerIds(room));
+  return room.caughtTargetIds.filter((id) => runnerIds.has(id)).length;
+}
+
+function areAllRunnersCaught(room: Room): boolean {
+  const runnerIds = getRunnerIds(room);
+  return runnerIds.length > 0 && runnerIds.every((id) => room.caughtTargetIds.includes(id));
+}
+
 function findTarget(socket: Socket, payload: { targetId?: string } = {}): void {
   const room = findJoinedRoom(socket);
   if (!room || room.state !== 'playing' || !room.game) {
@@ -620,17 +645,32 @@ function findTarget(socket: Socket, payload: { targetId?: string } = {}): void {
     socket.emit('room_error', { message: '선택할 수 있는 원을 클릭해 주세요.' });
     return;
   }
-  room.selectedTargetId = targetId;
+  if (room.caughtTargetIds.includes(targetId)) {
+    socket.emit('room_error', { message: '이미 잡힌 도망자입니다. 다른 원을 찾아주세요.' });
+    return;
+  }
 
   const target = room.players.find((item) => item.socketId === targetId);
-  const success = target?.role === 'artist';
-  room.result = {
-    selectedTargetId: targetId,
-    success,
-    message: success ? '술래가 도망자의 원을 찾았습니다.' : '술래가 원을 찾지 못했습니다.'
-  };
-  room.game.phase = 'result';
-  room.game.phaseStartedAt = Date.now();
+  if (!target || target.role !== 'artist') {
+    socket.emit('room_error', { message: '도망자 원만 잡을 수 있습니다.' });
+    return;
+  }
+
+  room.selectedTargetId = targetId;
+  room.caughtTargetIds.push(targetId);
+
+  if (areAllRunnersCaught(room)) {
+    room.result = {
+      selectedTargetId: targetId,
+      success: true,
+      message: `도망자 ${getCaughtRunnerCount(room)}명을 모두 잡았습니다. 술래 승리!`
+    };
+    room.game.phase = 'result';
+    room.game.phaseStartedAt = Date.now();
+  } else {
+    room.result = null;
+  }
+
   room.updatedAt = Date.now();
   emitRoomState(room);
 }
@@ -646,21 +686,7 @@ function confirmFind(socket: Socket): void {
     socket.emit('room_error', { message: '술래만 결과를 확정할 수 있습니다.' });
     return;
   }
-  if (room.game.phase !== 'find' || !room.selectedTargetId) {
-    socket.emit('room_error', { message: '먼저 원을 선택해 주세요.' });
-    return;
-  }
-  const target = room.players.find((item) => item.socketId === room.selectedTargetId);
-  const success = target?.role === 'artist';
-  room.result = {
-    selectedTargetId: room.selectedTargetId,
-    success,
-    message: success ? '술래가 도망자의 원을 찾았습니다.' : '술래가 원을 찾지 못했습니다.'
-  };
-  room.game.phase = 'result';
-  room.game.phaseStartedAt = Date.now();
-  room.updatedAt = Date.now();
-  emitRoomState(room);
+  socket.emit('room_error', { message: '이제 원을 클릭하면 즉시 잡힘 처리됩니다. 모든 도망자를 잡으면 게임이 종료됩니다.' });
 }
 
 function restartGame(socket: Socket): void {
@@ -861,6 +887,7 @@ io.on('connection', (socket) => {
         artwork,
         game: null,
         submissions: {},
+        caughtTargetIds: [],
         selectedTargetId: null,
         result: null,
         focusScores: {},
