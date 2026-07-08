@@ -1140,3 +1140,99 @@ kbd {
     flex: 1 1 130px;
   }
 }
+
+/* v0.0.41 Fixed Action HUD */
+.game-header {
+  position: sticky;
+  top: 8px;
+  z-index: 20;
+  padding: 10px 12px;
+  border: 2px solid #2f261d;
+  border-radius: 20px;
+  background: rgba(255, 250, 240, 0.98);
+  box-shadow: 4px 4px 0 #2f261d;
+}
+
+.game-header-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.top-action-panel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  max-width: 560px;
+}
+
+.top-action-panel button {
+  min-width: 104px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  white-space: nowrap;
+}
+
+.top-action-panel .find-button {
+  background: #8c5f30;
+}
+
+.top-action-panel .restart-button {
+  background: #2f6d29;
+}
+
+.top-action-status {
+  flex-basis: 100%;
+  min-height: 18px;
+  margin: 0;
+  color: #6f604e;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.35;
+  text-align: right;
+}
+
+.submit-panel-guide {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 2px dashed #e8d8bd;
+  border-radius: 14px;
+  background: #fff3dd;
+}
+
+@media (max-width: 1180px) {
+  .game-header {
+    align-items: stretch;
+  }
+
+  .game-header-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .top-action-panel {
+    max-width: none;
+  }
+
+  .top-action-status {
+    text-align: left;
+  }
+}
+
+@media (max-width: 720px) {
+  .top-score-panel,
+  .top-timer-panel,
+  .mini-code,
+  .top-action-panel button,
+  .game-header-actions > .ghost {
+    flex: 1 1 auto;
+  }
+
+  .top-action-panel {
+    width: 100%;
+  }
+
+  .top-action-panel button {
+    min-width: 0;
+  }
+}

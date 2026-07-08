@@ -106,7 +106,7 @@ const STORAGE_KEYS = {
 } as const;
 
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3000';
-const VERSION = '0.0.40';
+const VERSION = '0.0.41';
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/jpg'];
 
@@ -119,7 +119,7 @@ app.innerHTML = `
       <div class="title-row">
         <div>
           <p class="eyebrow">BobArtist</p>
-          <h1>v${VERSION} Phase Timer UI Engine</h1>
+          <h1>v${VERSION} Fixed Action HUD Engine</h1>
         </div>
         <span id="socketStatus" class="badge badge-wait">연결 대기</span>
       </div>
@@ -190,6 +190,12 @@ app.innerHTML = `
           <div class="top-timer-panel">
             <span>남은 시간</span>
             <strong id="topTimerView">--:--</strong>
+          </div>
+          <div class="top-action-panel">
+            <button id="submitArtworkButton" type="button">제출</button>
+            <button id="confirmFindButton" type="button" class="find-button" disabled>찾기 단계 대기</button>
+            <button id="restartGameButton" type="button" class="restart-button" disabled>다시 시작</button>
+            <p id="submitStatusView" class="top-action-status">꾸미기가 끝나면 제출하세요.</p>
           </div>
           <span id="gameRoomCode" class="mini-code">------</span>
           <button id="gameLeaveButton" type="button" class="ghost">방 나가기</button>
@@ -277,11 +283,8 @@ app.innerHTML = `
             </div>
           </div>
 
-          <div class="submit-panel">
-            <button id="submitArtworkButton" type="button">제출</button>
-            <button id="confirmFindButton" type="button" class="find-button" disabled>클릭 즉시 결과</button>
-            <button id="restartGameButton" type="button" class="restart-button" disabled>다시 시작</button>
-            <p id="submitStatusView" class="hint">꾸미기가 끝나면 제출하세요.</p>
+          <div class="submit-panel submit-panel-guide">
+            <p class="hint">제출/찾기/다시 시작 버튼은 항상 보이도록 상단 고정바로 이동했습니다.</p>
           </div>
 
           <div class="game-info-list">
@@ -303,7 +306,7 @@ app.innerHTML = `
             </div>
           </div>
 
-          <p class="hint">v0.0.40은 1분 그리기, 5분 찾기, 상단 고정 HUD를 적용한 버전입니다.</p>
+          <p class="hint">v0.0.41은 상단 고정 액션바와 라운드 초기화 안정화를 적용한 버전입니다.</p>
         </aside>
       </section>
     </section>
@@ -385,12 +388,24 @@ const paintContext = paintCanvas.getContext('2d');
 if (!paintContext) throw new Error('Paint canvas context not available');
 const paintCtx: CanvasRenderingContext2D = paintContext;
 
+function resetCanvasDrawState(ctx: CanvasRenderingContext2D): void {
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.shadowBlur = 0;
+  ctx.shadowColor = 'transparent';
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = 0;
+  ctx.lineWidth = 1;
+  ctx.setLineDash([]);
+}
+
 function fillPaintCanvasWhite(): void {
   // Character artwork is stored as an opaque white canvas from the start.
   // This lets the spy screen draw only the submitted image pixels without a separate base circle,
   // preventing canvas stroke/clip artifacts from becoming a visible outline.
   paintCtx.save();
-  paintCtx.globalCompositeOperation = 'source-over';
+  resetCanvasDrawState(paintCtx);
   paintCtx.shadowBlur = 0;
   paintCtx.shadowColor = 'transparent';
   paintCtx.setLineDash([]);
@@ -626,6 +641,12 @@ function resetRoundLocalState(): void {
   lastPaintPoint = null;
   showCharacterGuide = false;
   submissionImageCache.clear();
+  if (spyVisionAnimationFrame !== null) {
+    window.cancelAnimationFrame(spyVisionAnimationFrame);
+    spyVisionAnimationFrame = null;
+  }
+  resetCanvasDrawState(gameCtx);
+  resetCanvasDrawState(paintCtx);
   spyVisionOverlay.classList.remove('is-active', 'is-find');
   resetCharacter();
 }
@@ -709,6 +730,7 @@ function updateToolHint(message: string): void {
 }
 
 function drawBackgroundOnly(ctx: CanvasRenderingContext2D): void {
+  resetCanvasDrawState(ctx);
   ctx.clearRect(0, 0, gameCanvas.width, gameCanvas.height);
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, gameCanvas.width, gameCanvas.height);
@@ -1012,6 +1034,7 @@ function drawCaughtMark(ctx: CanvasRenderingContext2D, submission: ArtworkSubmis
 }
 
 function renderGameCanvas(): void {
+  resetCanvasDrawState(gameCtx);
   const phase = currentRoom?.game?.phase;
 
   if (shouldHideArtworkFromSpy()) {
@@ -1036,6 +1059,7 @@ function renderGameCanvas(): void {
       if (isSubmissionCaught(submission)) drawCaughtMark(gameCtx, submission);
     });
   } else if (isArtistPlayer()) {
+    ensureCharacterInsideCanvas();
     drawCharacter(gameCtx);
   }
 
@@ -1103,6 +1127,14 @@ function setScoreText(label: string, value: string): void {
   focusScoreView.textContent = value;
   topScoreLabel.textContent = label;
   topScoreView.textContent = value;
+}
+
+function ensureCharacterInsideCanvas(): void {
+  if (!gameCanvas.width || !gameCanvas.height) return;
+  const maxRadius = Math.max(20, Math.min(200, Math.min(gameCanvas.width, gameCanvas.height) * 0.35));
+  character.radius = Math.min(maxRadius, Math.max(10, character.radius));
+  character.x = Math.min(gameCanvas.width - character.radius, Math.max(character.radius, character.x));
+  character.y = Math.min(gameCanvas.height - character.radius, Math.max(character.radius, character.y));
 }
 
 function renderFocusScores(): void {
