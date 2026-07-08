@@ -107,8 +107,6 @@ const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3000';
 const VERSION = '0.0.33';
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/jpg'];
-const SPY_CIRCLE_EDGE_FEATHER_PX = 5;
-const SPY_CIRCLE_EDGE_GUARD_PX = 1.25;
 
 const app = document.querySelector<HTMLDivElement>('#app');
 if (!app) throw new Error('#app element not found');
@@ -739,39 +737,10 @@ function drawSpySafeCircleImage(
   y: number,
   radius: number
 ): void {
-  // Spy rendering intentionally removes the circle shell.
-  // No base fill is drawn, and the outer alpha is feathered inward so clip antialiasing
-  // or brush pixels cut at the exact circle boundary cannot appear as a hidden outline.
-  const safeRadius = Math.max(0, radius - SPY_CIRCLE_EDGE_GUARD_PX);
-  const feather = Math.min(SPY_CIRCLE_EDGE_FEATHER_PX, Math.max(1, safeRadius * 0.18));
-  const pad = Math.ceil(feather + SPY_CIRCLE_EDGE_GUARD_PX + 1);
-  const size = Math.ceil(radius * 2 + pad * 2);
-  const buffer = document.createElement('canvas');
-  buffer.width = size;
-  buffer.height = size;
-
-  const bufferCtx = buffer.getContext('2d');
-  if (!bufferCtx) return;
-
-  bufferCtx.clearRect(0, 0, size, size);
-  bufferCtx.drawImage(image, pad, pad, radius * 2, radius * 2);
-
-  const center = size / 2;
-  const mask = bufferCtx.createRadialGradient(center, center, Math.max(0, safeRadius - feather), center, center, safeRadius);
-  mask.addColorStop(0, 'rgba(0,0,0,1)');
-  mask.addColorStop(1, 'rgba(0,0,0,0)');
-
-  bufferCtx.globalCompositeOperation = 'destination-in';
-  bufferCtx.fillStyle = mask;
-  bufferCtx.fillRect(0, 0, size, size);
-  bufferCtx.globalCompositeOperation = 'source-over';
-
-  ctx.save();
-  ctx.globalCompositeOperation = 'source-over';
-  ctx.shadowBlur = 0;
-  ctx.shadowColor = 'transparent';
-  ctx.drawImage(buffer, x - radius - pad, y - radius - pad);
-  ctx.restore();
+  // 술래 화면은 흰 원판은 유지하되, 별도의 테두리/그림자/페더 링을 절대 만들지 않습니다.
+  // v0.0.35의 inward feather mask는 칠한 영역 바깥에 흰 링이 생겨 술래에게 테두리처럼 보였습니다.
+  // 그래서 술래도 도망자와 동일하게 hard clip만 사용하고, 외곽 stroke는 drawSubmission에서 차단합니다.
+  drawHardClippedCircleImage(ctx, image, x, y, radius);
 }
 
 function drawCharacter(ctx: CanvasRenderingContext2D): void {
@@ -865,19 +834,28 @@ function drawSubmission(
   const py = snapCirclePoint(y);
   const image = getSubmissionImage(submission);
 
+  const baseColor = submission.character.baseColor || '#FFFFFF';
+  drawSolidCircleBase(ctx, px, py, radius, baseColor);
+
   if (hideCircleShell) {
+    // 술래 화면에서도 캐릭터의 흰 원판은 유지합니다.
+    // 단, 이미지 픽셀이 원 경계에서 잘리며 생기는 테두리/잔상만 안쪽으로 마스킹합니다.
     if (image) drawSpySafeCircleImage(ctx, image, px, py, radius);
-  } else {
-    const baseColor = submission.character.baseColor || '#FFFFFF';
-    drawSolidCircleBase(ctx, px, py, radius, baseColor);
-    if (image) drawHardClippedCircleImage(ctx, image, px, py, radius);
+  } else if (image) {
+    drawHardClippedCircleImage(ctx, image, px, py, radius);
   }
+
+  // 술래의 REVEAL/FIND 화면에서는 원의 외곽선, 선택선, 점선 가이드가 힌트가 될 수 있으므로
+  // 흰 원판과 내부 그림만 그리고 여기서 종료합니다.
+  if (hideCircleShell) return;
 
   // FIND 단계에서는 술래가 실제로 숨은 원을 찾아야 하므로
   // 선택 전 점선 가이드를 표시하지 않습니다.
   if (!selected && !showHiddenGuide) return;
 
   ctx.save();
+  ctx.shadowBlur = 0;
+  ctx.shadowColor = 'transparent';
   ctx.lineWidth = selected ? 5 : 2;
   ctx.setLineDash(selected ? [] : [8, 6]);
   ctx.strokeStyle = selected ? 'rgba(202, 57, 57, 0.95)' : 'rgba(47, 38, 29, 0.62)';

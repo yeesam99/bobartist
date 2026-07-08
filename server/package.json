@@ -1,6 +1,6 @@
 {
   "name": "bobartist-server",
-  "version": "0.0.32",
+  "version": "0.0.36",
   "private": true,
   "main": "src/index.ts",
   "scripts": {
