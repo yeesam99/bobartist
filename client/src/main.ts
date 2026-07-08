@@ -106,7 +106,7 @@ const STORAGE_KEYS = {
 } as const;
 
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3000';
-const VERSION = '0.0.42';
+const VERSION = '0.0.43';
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/jpg'];
 
@@ -306,7 +306,7 @@ app.innerHTML = `
             </div>
           </div>
 
-          <p class="hint">v0.0.42는 도망자 제출 버튼 상단 고정과 그리기 시간 종료 자동 제출을 보강한 버전입니다.</p>
+          <p class="hint">v0.0.43은 시간 종료 시 서버 요청 기반 자동 제출을 추가해 실제 원 위치와 그림 스냅샷을 우선 보존합니다.</p>
         </aside>
       </section>
     </section>
@@ -1545,6 +1545,16 @@ function connectSocket(): void {
   socket.on('room_state', (room: PublicRoom) => {
     console.log('[BobArtist] room_state', room);
     renderRoom(room);
+  });
+
+  socket.on('auto_submit_required', (payload: { round?: number; deadlineAt?: number }) => {
+    console.log('[BobArtist] auto_submit_required', payload);
+    const me = getMe(currentRoom);
+    const phase = currentRoom?.game?.phase;
+    if (me?.role === 'artist' && !me.submitted && (phase === 'decorate' || phase === 'submit')) {
+      submitCurrentArtwork();
+      setMessage('그리기 시간이 종료되어 현재 원 위치와 그림을 자동 제출했습니다.', 'success');
+    }
   });
 
   socket.on('game_started', (room: PublicRoom) => {

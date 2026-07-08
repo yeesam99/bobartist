@@ -3,7 +3,7 @@ import cors from 'cors';
 import { createServer } from 'http';
 import { Server, Socket } from 'socket.io';
 
-// BobArtist v0.0.42
+// BobArtist v0.0.43
 // DB 사용 없음: 방 상태와 업로드 이미지는 서버 메모리에만 저장합니다.
 
 type RoomState = 'lobby' | 'playing' | 'ended';
@@ -141,7 +141,7 @@ type PublicRoom = {
   updatedAt: number;
 };
 
-const VERSION = '0.0.42';
+const VERSION = '0.0.43';
 const PORT = Number(process.env.PORT || 3000);
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
 const CLIENT_ORIGINS = CLIENT_ORIGIN === '*'
@@ -151,6 +151,7 @@ const MIN_PLAYERS = 2;
 const MAX_PLAYERS = 8;
 const DECORATE_DURATION_MS = 60 * 1000;
 const FIND_DURATION_MS = 5 * 60 * 1000;
+const AUTO_SUBMIT_GRACE_MS = 900;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const ROLE_ASSIGN_DELAY_MS = 900;
 const REVEAL_TO_FIND_DELAY_MS = 2000;
@@ -348,6 +349,20 @@ function ensureMissingRunnerSubmissions(room: Room): void {
     });
 }
 
+function finishDecorateTimeout(roomCode: string, round: number, phaseStartedAt: number): void {
+  const latestRoom = rooms.get(roomCode);
+  if (!latestRoom || latestRoom.state !== 'playing' || !latestRoom.game) return;
+  if (latestRoom.game.round !== round || latestRoom.game.phaseStartedAt !== phaseStartedAt) return;
+  if (latestRoom.game.phase !== 'decorate' && latestRoom.game.phase !== 'submit') return;
+
+  ensureMissingRunnerSubmissions(latestRoom);
+  latestRoom.game.phase = 'reveal';
+  latestRoom.game.phaseStartedAt = Date.now();
+  latestRoom.updatedAt = Date.now();
+  emitRoomState(latestRoom);
+  scheduleFindPhase(latestRoom.code);
+}
+
 function scheduleDecorateTimeout(roomCode: string, round: number, phaseStartedAt: number): void {
   setTimeout(() => {
     const latestRoom = rooms.get(roomCode);
@@ -355,12 +370,21 @@ function scheduleDecorateTimeout(roomCode: string, round: number, phaseStartedAt
     if (latestRoom.game.round !== round || latestRoom.game.phaseStartedAt !== phaseStartedAt) return;
     if (latestRoom.game.phase !== 'decorate' && latestRoom.game.phase !== 'submit') return;
 
-    ensureMissingRunnerSubmissions(latestRoom);
-    latestRoom.game.phase = 'reveal';
-    latestRoom.game.phaseStartedAt = Date.now();
-    latestRoom.updatedAt = Date.now();
-    emitRoomState(latestRoom);
-    scheduleFindPhase(latestRoom.code);
+    // 시간 종료 순간 서버가 바로 기본 흰 원을 생성하면,
+    // 클라이언트가 가진 실제 위치/그림 스냅샷이 반영되지 않아 다음 단계에서 원이 엉뚱하게 보일 수 있습니다.
+    // 먼저 모든 도망자 클라이언트에 자동 제출을 요청하고, 짧은 유예 뒤에도 누락된 인원만 서버 기본값으로 보정합니다.
+    if (latestRoom.game.phase === 'decorate') {
+      latestRoom.game.phase = 'submit';
+      latestRoom.updatedAt = Date.now();
+      emitRoomState(latestRoom);
+    }
+
+    io.to(latestRoom.code).emit('auto_submit_required', {
+      round,
+      deadlineAt: Date.now() + AUTO_SUBMIT_GRACE_MS
+    });
+
+    setTimeout(() => finishDecorateTimeout(roomCode, round, phaseStartedAt), AUTO_SUBMIT_GRACE_MS);
   }, DECORATE_DURATION_MS);
 }
 
