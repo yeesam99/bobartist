@@ -106,7 +106,7 @@ const STORAGE_KEYS = {
 } as const;
 
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3000';
-const VERSION = '0.0.41';
+const VERSION = '0.0.42';
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/jpg'];
 
@@ -119,7 +119,7 @@ app.innerHTML = `
       <div class="title-row">
         <div>
           <p class="eyebrow">BobArtist</p>
-          <h1>v${VERSION} Fixed Action HUD Engine</h1>
+          <h1>v${VERSION} Auto Submit HUD Engine</h1>
         </div>
         <span id="socketStatus" class="badge badge-wait">연결 대기</span>
       </div>
@@ -183,6 +183,12 @@ app.innerHTML = `
           <p id="gameSubTitle" class="game-subtitle">원본 이미지 위에 내 원형 캐릭터 색칠</p>
         </div>
         <div class="game-header-actions">
+          <div class="top-action-panel">
+            <button id="submitArtworkButton" type="button">제출</button>
+            <button id="confirmFindButton" type="button" class="find-button" disabled>찾기 단계 대기</button>
+            <button id="restartGameButton" type="button" class="restart-button" disabled>다시 시작</button>
+            <p id="submitStatusView" class="top-action-status">꾸미기가 끝나면 제출하세요.</p>
+          </div>
           <div id="topScorePanel" class="top-score-panel">
             <span id="topScoreLabel">술래 점수</span>
             <strong id="topScoreView">대기</strong>
@@ -190,12 +196,6 @@ app.innerHTML = `
           <div class="top-timer-panel">
             <span>남은 시간</span>
             <strong id="topTimerView">--:--</strong>
-          </div>
-          <div class="top-action-panel">
-            <button id="submitArtworkButton" type="button">제출</button>
-            <button id="confirmFindButton" type="button" class="find-button" disabled>찾기 단계 대기</button>
-            <button id="restartGameButton" type="button" class="restart-button" disabled>다시 시작</button>
-            <p id="submitStatusView" class="top-action-status">꾸미기가 끝나면 제출하세요.</p>
           </div>
           <span id="gameRoomCode" class="mini-code">------</span>
           <button id="gameLeaveButton" type="button" class="ghost">방 나가기</button>
@@ -306,7 +306,7 @@ app.innerHTML = `
             </div>
           </div>
 
-          <p class="hint">v0.0.41은 상단 고정 액션바와 라운드 초기화 안정화를 적용한 버전입니다.</p>
+          <p class="hint">v0.0.42는 도망자 제출 버튼 상단 고정과 그리기 시간 종료 자동 제출을 보강한 버전입니다.</p>
         </aside>
       </section>
     </section>
@@ -435,6 +435,8 @@ let lastRenderedRound = 0;
 let lastFocusPointerSentAt = 0;
 let latestFocusScores: FocusScorePayload | null = null;
 let gameTimerInterval: number | null = null;
+let autoSubmitTimeout: number | null = null;
+let autoSubmitKey = '';
 const DECORATE_DURATION_MS = 60 * 1000;
 const FIND_DURATION_MS = 5 * 60 * 1000;
 const SPY_FULL_VIEW_MS = 1000;
@@ -1222,6 +1224,7 @@ function sampleColor(point: { x: number; y: number }): void {
 }
 
 function submitCurrentArtwork(): void {
+  clearAutoSubmitTimeout();
   const me = getMe(currentRoom);
   if (me?.role === 'artist') {
     socket?.emit('submit_artwork', {
@@ -1300,6 +1303,42 @@ function renderLobbyRoom(room: PublicRoom | null): void {
 }
 
 
+
+function clearAutoSubmitTimeout(): void {
+  if (autoSubmitTimeout !== null) {
+    window.clearTimeout(autoSubmitTimeout);
+    autoSubmitTimeout = null;
+  }
+}
+
+function scheduleAutoSubmit(room: PublicRoom): void {
+  const me = getMe(room);
+  const phase = room.game?.phase;
+  if (!room.game || me?.role !== 'artist' || me.submitted || (phase !== 'decorate' && phase !== 'submit')) {
+    clearAutoSubmitTimeout();
+    autoSubmitKey = '';
+    return;
+  }
+
+  const key = `${room.code}:${room.game.round}:${room.game.phaseStartedAt}:${mySocketId}`;
+  if (autoSubmitKey === key && autoSubmitTimeout !== null) return;
+
+  clearAutoSubmitTimeout();
+  autoSubmitKey = key;
+
+  const remaining = getRemainingGameTime(room);
+  const delay = Math.max(0, remaining + 80);
+  autoSubmitTimeout = window.setTimeout(() => {
+    autoSubmitTimeout = null;
+    const latestMe = getMe(currentRoom);
+    const latestPhase = currentRoom?.game?.phase;
+    if (latestMe?.role === 'artist' && !latestMe.submitted && (latestPhase === 'decorate' || latestPhase === 'submit')) {
+      submitCurrentArtwork();
+      setMessage('그리기 시간이 종료되어 자동 제출했습니다.', 'success');
+    }
+  }, delay);
+}
+
 function formatRemainingTime(ms: number): string {
   const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
   const minutes = Math.floor(totalSeconds / 60);
@@ -1324,11 +1363,13 @@ function renderGameTimer(): void {
   if (!currentRoom?.game) {
     gameTimerView.textContent = '--:--';
     topTimerView.textContent = '--:--';
+    clearAutoSubmitTimeout();
     return;
   }
   if (currentRoom.game.phase === 'result') {
     gameTimerView.textContent = '종료';
     topTimerView.textContent = '종료';
+    clearAutoSubmitTimeout();
     return;
   }
 
@@ -1382,6 +1423,7 @@ function renderGameRoom(room: PublicRoom): void {
   gameRoomCode.textContent = room.code;
   gamePhaseView.textContent = phaseLabel;
   renderGameTimer();
+  scheduleAutoSubmit(room);
   if (phase === 'result') stopGameTimerTicker();
   else startGameTimerTicker();
   gameArtworkNameView.textContent = room.game?.artwork.fileName || room.artwork.fileName;

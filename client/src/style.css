@@ -1141,7 +1141,7 @@ kbd {
   }
 }
 
-/* v0.0.41 Fixed Action HUD */
+/* v0.0.42 Auto Submit HUD */
 .game-header {
   position: sticky;
   top: 8px;
@@ -1159,15 +1159,15 @@ kbd {
 }
 
 .top-action-panel {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(3, max-content);
   align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
-  max-width: 560px;
+  flex: 0 0 auto;
 }
 
 .top-action-panel button {
-  min-width: 104px;
+  min-width: 112px;
   padding: 10px 14px;
   border-radius: 14px;
   white-space: nowrap;
@@ -1182,14 +1182,14 @@ kbd {
 }
 
 .top-action-status {
-  flex-basis: 100%;
+  grid-column: 1 / -1;
   min-height: 18px;
   margin: 0;
   color: #6f604e;
   font-size: 12px;
   font-weight: 800;
   line-height: 1.35;
-  text-align: right;
+  text-align: left;
 }
 
 .submit-panel-guide {
@@ -1230,6 +1230,7 @@ kbd {
 
   .top-action-panel {
     width: 100%;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .top-action-panel button {
