@@ -366,6 +366,22 @@ const paintContext = paintCanvas.getContext('2d');
 if (!paintContext) throw new Error('Paint canvas context not available');
 const paintCtx: CanvasRenderingContext2D = paintContext;
 
+function fillPaintCanvasWhite(): void {
+  // Character artwork is stored as an opaque white canvas from the start.
+  // This lets the spy screen draw only the submitted image pixels without a separate base circle,
+  // preventing canvas stroke/clip artifacts from becoming a visible outline.
+  paintCtx.save();
+  paintCtx.globalCompositeOperation = 'source-over';
+  paintCtx.shadowBlur = 0;
+  paintCtx.shadowColor = 'transparent';
+  paintCtx.setLineDash([]);
+  paintCtx.fillStyle = '#FFFFFF';
+  paintCtx.fillRect(0, 0, paintCanvas.width, paintCanvas.height);
+  paintCtx.restore();
+}
+
+fillPaintCanvasWhite();
+
 let socket: Socket | null = null;
 let currentRoom: PublicRoom | null = null;
 let mySocketId = '';
@@ -571,6 +587,7 @@ function resetCharacter(): void {
   brushSize = 5;
   zoomLevel = 1;
   paintCtx.clearRect(0, 0, paintCanvas.width, paintCanvas.height);
+  fillPaintCanvasWhite();
   brushSizeInput.value = String(brushSize);
   characterSizeInput.value = String(character.radius * 2);
   updateColorStatus();
@@ -834,15 +851,15 @@ function drawSubmission(
   const py = snapCirclePoint(y);
   const image = getSubmissionImage(submission);
 
-  const baseColor = submission.character.baseColor || '#FFFFFF';
-  drawSolidCircleBase(ctx, px, py, radius, baseColor);
-
   if (hideCircleShell) {
-    // 술래 화면에서도 캐릭터의 흰 원판은 유지합니다.
-    // 단, 이미지 픽셀이 원 경계에서 잘리며 생기는 테두리/잔상만 안쪽으로 마스킹합니다.
+    // 술래 화면에서는 별도 흰 원판/base circle을 그리지 않습니다.
+    // 도망자의 paintCanvas 자체가 흰색 배경을 가지고 있으므로,
+    // 제출 이미지 픽셀만 원형으로 잘라 그리면 별도 stroke/halo가 생길 경로가 사라집니다.
     if (image) drawSpySafeCircleImage(ctx, image, px, py, radius);
-  } else if (image) {
-    drawHardClippedCircleImage(ctx, image, px, py, radius);
+  } else {
+    const baseColor = submission.character.baseColor || '#FFFFFF';
+    drawSolidCircleBase(ctx, px, py, radius, baseColor);
+    if (image) drawHardClippedCircleImage(ctx, image, px, py, radius);
   }
 
   // 술래의 REVEAL/FIND 화면에서는 원의 외곽선, 선택선, 점선 가이드가 힌트가 될 수 있으므로

@@ -1,3 +1,10 @@
+# BobArtist v0.0.37
+
+## Circle Render Engine
+- 술래 화면에서는 별도 원판/base circle을 그리지 않도록 변경했습니다.
+- 도망자 paintCanvas를 기본 흰색 배경으로 초기화해, 아무것도 칠하지 않아도 제출 이미지 자체가 흰 원으로 보이게 했습니다.
+- 원 테두리/점선/halo가 생기는 렌더링 경로를 줄였습니다.
+
 # BobArtist v0.0.36
 
 ## 수정
