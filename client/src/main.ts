@@ -104,7 +104,7 @@ const STORAGE_KEYS = {
 } as const;
 
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3000';
-const VERSION = '0.0.33';
+const VERSION = '0.0.38';
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/jpg'];
 
@@ -117,7 +117,7 @@ app.innerHTML = `
       <div class="title-row">
         <div>
           <p class="eyebrow">BobArtist</p>
-          <h1>v${VERSION} Focus Score UI Engine</h1>
+          <h1>v${VERSION} Game Timer Multi Runner</h1>
         </div>
         <span id="socketStatus" class="badge badge-wait">연결 대기</span>
       </div>
@@ -280,16 +280,20 @@ app.innerHTML = `
               <strong id="gamePhaseView">DECORATE</strong>
             </div>
             <div>
+              <span>남은 시간</span>
+              <strong id="gameTimerView">05:00</strong>
+            </div>
+            <div>
               <span>원본</span>
               <strong id="gameArtworkNameView">-</strong>
             </div>
             <div>
               <span>참가자</span>
-              <strong id="gamePlayerCountView">0/2</strong>
+              <strong id="gamePlayerCountView">0/8</strong>
             </div>
           </div>
 
-          <p class="hint">v0.0.30은 배포 안정화 버전입니다. 로컬에서는 npm run dev, 외부 테스트는 Render/Vercel 배포를 사용합니다.</p>
+          <p class="hint">v0.0.38은 5분 제한 시간과 다인 도망자 규칙을 적용한 버전입니다.</p>
         </aside>
       </section>
     </section>
@@ -346,6 +350,7 @@ const guideHud = document.querySelector<HTMLElement>('#guideHud')!;
 const zoomHud = document.querySelector<HTMLElement>('#zoomHud')!;
 const resetHud = document.querySelector<HTMLElement>('#resetHud')!;
 const gamePhaseView = document.querySelector<HTMLElement>('#gamePhaseView')!;
+const gameTimerView = document.querySelector<HTMLElement>('#gameTimerView')!;
 const gameArtworkNameView = document.querySelector<HTMLElement>('#gameArtworkNameView')!;
 const gamePlayerCountView = document.querySelector<HTMLElement>('#gamePlayerCountView')!;
 const focusScorePanel = document.querySelector<HTMLElement>('#focusScorePanel')!;
@@ -400,6 +405,8 @@ let showCharacterGuide = false;
 let lastRenderedRound = 0;
 let lastFocusPointerSentAt = 0;
 let latestFocusScores: FocusScorePayload | null = null;
+let gameTimerInterval: number | null = null;
+const GAME_DURATION_MS = 5 * 60 * 1000;
 const SPY_FULL_VIEW_MS = 1000;
 const SPY_DARKEN_MS = 1000;
 const SPY_LIGHT_RADIUS = 170;
@@ -479,12 +486,12 @@ function canArtistDecorate(): boolean {
 }
 
 function getPhaseMessage(phase?: GamePhase): string {
-  if (phase === 'role_assignment') return '역할을 배정하는 중입니다. 이번 버전은 방장이 술래입니다.';
-  if (phase === 'decorate') return '원을 자연스럽게 숨기도록 꾸미고 제출하세요.';
+  if (phase === 'role_assignment') return '역할을 배정하는 중입니다. 술래 1명과 도망자 여러 명으로 진행됩니다.';
+  if (phase === 'decorate') return '5분 안에 원을 자연스럽게 숨기고 제출하세요.';
   if (phase === 'submit') return '다른 플레이어의 제출을 기다리는 중입니다.';
-  if (phase === 'reveal') return '제출 완료. 모든 원이 공개되고 술래가 찾기를 준비합니다.';
-  if (phase === 'find') return '술래가 조준경 커서로 숨은 원을 선택하는 단계입니다.';
-  if (phase === 'result') return '결과 단계입니다. 방장만 다시 시작하여 다음 라운드를 열 수 있습니다.';
+  if (phase === 'reveal') return '제출 완료. 모든 도망자의 원이 공개되고 술래가 찾기를 준비합니다.';
+  if (phase === 'find') return '술래가 제한 시간 안에 도망자의 원을 선택하는 단계입니다.';
+  if (phase === 'result') return '결과 단계입니다. 시간 초과면 도망자 승리, 원을 찾으면 술래 승리입니다.';
   return '게임 상태를 준비하고 있습니다.';
 }
 
@@ -497,6 +504,7 @@ function getArtworkUrl(artwork: Artwork): string {
 }
 
 function showLobbyPage(): void {
+  stopGameTimerTicker();
   lobbyPage.classList.remove('hidden');
   gamePage.classList.add('hidden');
 }
@@ -1141,13 +1149,13 @@ function renderLobbyActions(room: PublicRoom | null): void {
   if (!room) {
     startHint.textContent = '방에 입장하면 참가자는 준비할 수 있습니다.';
   } else if (isHost && room.playerCount < room.maxPlayers) {
-    startHint.textContent = '참가자 1명이 입장하면 게임을 시작할 수 있습니다.';
+    startHint.textContent = '최소 1명의 도망자가 입장하면 게임을 시작할 수 있습니다.';
   } else if (isHost && !room.canStart) {
-    startHint.textContent = '참가자 READY를 기다리는 중입니다. 방장은 준비 버튼이 필요 없습니다.';
+    startHint.textContent = '도망자 READY를 기다리는 중입니다. 술래는 준비 버튼이 필요 없습니다.';
   } else if (isHost) {
-    startHint.textContent = '참가자 준비 완료. 방장이 게임을 시작할 수 있습니다.';
+    startHint.textContent = '도망자 준비 완료. 방장이 게임을 시작할 수 있습니다.';
   } else if (!me?.ready) {
-    startHint.textContent = '참가자는 준비 버튼을 눌러야 합니다. 방장은 술래라 자동 준비 상태입니다.';
+    startHint.textContent = '도망자는 준비 버튼을 눌러야 합니다. 방장은 술래라 자동 준비 상태입니다.';
   } else {
     startHint.textContent = '준비 완료. 방장이 게임을 시작할 때까지 기다려 주세요.';
   }
@@ -1187,6 +1195,49 @@ function renderLobbyRoom(room: PublicRoom | null): void {
   void drawLobbyRoomCanvas(room);
 }
 
+
+function formatRemainingTime(ms: number): string {
+  const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+}
+
+function getRemainingGameTime(room: PublicRoom | null): number {
+  if (!room?.game || room.game.phase === 'result') return 0;
+  return Math.max(0, room.game.startedAt + GAME_DURATION_MS - Date.now());
+}
+
+function renderGameTimer(): void {
+  if (!currentRoom?.game) {
+    gameTimerView.textContent = '05:00';
+    return;
+  }
+  if (currentRoom.game.phase === 'result') {
+    gameTimerView.textContent = '종료';
+    return;
+  }
+  gameTimerView.textContent = formatRemainingTime(getRemainingGameTime(currentRoom));
+}
+
+function startGameTimerTicker(): void {
+  if (gameTimerInterval !== null) return;
+  gameTimerInterval = window.setInterval(() => {
+    if (!currentRoom?.game || currentRoom.game.phase === 'result') {
+      renderGameTimer();
+      stopGameTimerTicker();
+      return;
+    }
+    renderGameTimer();
+  }, 1000);
+}
+
+function stopGameTimerTicker(): void {
+  if (gameTimerInterval === null) return;
+  window.clearInterval(gameTimerInterval);
+  gameTimerInterval = null;
+}
+
 function renderGameRoom(room: PublicRoom): void {
   showGamePage();
   const me = getMe(room);
@@ -1204,15 +1255,18 @@ function renderGameRoom(room: PublicRoom): void {
   gameSubTitle.textContent = getPhaseMessage(phase);
   gameRoomCode.textContent = room.code;
   gamePhaseView.textContent = phaseLabel;
+  renderGameTimer();
+  if (phase === 'result') stopGameTimerTicker();
+  else startGameTimerTicker();
   gameArtworkNameView.textContent = room.game?.artwork.fileName || room.artwork.fileName;
   gamePlayerCountView.textContent = `${room.playerCount}/${room.maxPlayers}`;
   renderFocusScores();
 
   myRoleView.textContent = roleLabel;
   roleDescriptionView.textContent = isSpy
-    ? '술래입니다. 직접 원을 꾸미지 않고, 아티스트가 숨긴 원을 찾는 입장입니다.'
+    ? '술래입니다. 직접 원을 꾸미지 않고, 도망자들이 숨긴 원을 찾는 입장입니다.'
     : me?.role === 'artist'
-      ? '아티스트입니다. 원을 자연스럽게 꾸며 술래가 찾기 어렵게 만드세요.'
+      ? '도망자입니다. 원을 자연스럽게 꾸며 술래가 찾기 어렵게 만드세요.'
       : '역할 배정을 기다리는 중입니다.';
   roleCard.className = `role-card role-${me?.role || 'unknown'}`;
 
@@ -1225,7 +1279,7 @@ function renderGameRoom(room: PublicRoom): void {
   renderFocusScores();
 
   if (phase === 'result' && room.game?.result) {
-    submitStatusView.textContent = room.game.result.success ? `🎯 성공: ${room.game.result.message}` : `❌ 실패: ${room.game.result.message}`;
+    submitStatusView.textContent = room.game.result.success ? `🎯 술래 승리: ${room.game.result.message}` : `🏃 도망자 승리: ${room.game.result.message}`;
   } else if (phase === 'find' && room.game?.selectedTargetId) {
     const selected = room.players.find((player) => player.id === room.game?.selectedTargetId);
     submitStatusView.textContent = `선택됨: ${selected?.name || '알 수 없음'} · 선택 확정을 누르세요.`;
@@ -1240,7 +1294,7 @@ function renderGameRoom(room: PublicRoom): void {
   resetCharacterButton.disabled = !canDecorate;
   gameCanvasViewport.classList.toggle('spy-crosshair-mode', canFind);
   toolHint.textContent = isSpy
-    ? (canFind ? '도망자는 실시간 점수를 보고, 술래는 10초마다 누적 점수 스냅샷을 확인합니다.' : '술래는 꾸미기 도구를 사용할 수 없습니다. Reveal 이후 원을 찾습니다.')
+    ? (canFind ? '도망자는 실시간 점수를 보고, 술래는 제한 시간 안에 원을 찾습니다.' : '술래는 꾸미기 도구를 사용할 수 없습니다. 제한 시간 안에 도망자의 원을 찾습니다.')
     : (isRevealPhase(phase) ? '제출 후에는 이동과 그리기가 잠깁니다. 술래의 선택을 기다립니다.' : '기본은 항상 붓입니다. Space로 색을 가져오고 WASD로 이동합니다.');
 
   void loadGameArtwork(room);

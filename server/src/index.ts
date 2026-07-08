@@ -3,7 +3,7 @@ import cors from 'cors';
 import { createServer } from 'http';
 import { Server, Socket } from 'socket.io';
 
-// BobArtist v0.0.32
+// BobArtist v0.0.38
 // DB 사용 없음: 방 상태와 업로드 이미지는 서버 메모리에만 저장합니다.
 
 type RoomState = 'lobby' | 'playing' | 'ended';
@@ -139,13 +139,15 @@ type PublicRoom = {
   updatedAt: number;
 };
 
-const VERSION = '0.0.32';
+const VERSION = '0.0.38';
 const PORT = Number(process.env.PORT || 3000);
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
 const CLIENT_ORIGINS = CLIENT_ORIGIN === '*'
   ? '*'
   : CLIENT_ORIGIN.split(',').map((origin) => origin.trim()).filter(Boolean);
-const MAX_PLAYERS = 2;
+const MIN_PLAYERS = 2;
+const MAX_PLAYERS = 8;
+const GAME_DURATION_MS = 5 * 60 * 1000;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const ROLE_ASSIGN_DELAY_MS = 900;
 const REVEAL_TO_FIND_DELAY_MS = 2000;
@@ -250,7 +252,8 @@ function parseArtwork(payload?: CreateRoomRequest['artwork']): Artwork {
 
 function canStartGame(room: Room): boolean {
   return room.state === 'lobby'
-    && room.players.length === MAX_PLAYERS
+    && room.players.length >= MIN_PLAYERS
+    && room.players.length <= MAX_PLAYERS
     && room.players
       .filter((player) => player.socketId !== room.hostSocketId)
       .every((player) => player.ready);
@@ -310,6 +313,26 @@ function scheduleFindPhase(roomCode: string): void {
     if (!latestRoom || latestRoom.state !== 'playing' || latestRoom.game?.phase !== 'reveal') return;
     setGamePhase(latestRoom, 'find');
   }, REVEAL_TO_FIND_DELAY_MS);
+}
+
+function scheduleGameTimeout(roomCode: string, round: number, startedAt: number): void {
+  setTimeout(() => {
+    const latestRoom = rooms.get(roomCode);
+    if (!latestRoom || latestRoom.state !== 'playing' || !latestRoom.game) return;
+    if (latestRoom.game.round !== round || latestRoom.game.startedAt !== startedAt) return;
+    if (latestRoom.game.phase === 'result') return;
+
+    latestRoom.selectedTargetId = null;
+    latestRoom.result = {
+      selectedTargetId: null,
+      success: false,
+      message: '제한 시간 5분 종료. 도망자 승리!'
+    };
+    latestRoom.game.phase = 'result';
+    latestRoom.game.phaseStartedAt = Date.now();
+    latestRoom.updatedAt = Date.now();
+    emitRoomState(latestRoom);
+  }, GAME_DURATION_MS);
 }
 
 function toPublicRoom(room: Room): PublicRoom {
@@ -420,7 +443,7 @@ function joinRoom(socket: Socket, payload: ClientRoomRequest): void {
 
   const alreadyJoined = room.players.some((player) => player.socketId === socket.id);
   if (!alreadyJoined && room.players.length >= MAX_PLAYERS) {
-    socket.emit('room_error', { message: '방이 가득 찼습니다. 최대 2명까지 입장할 수 있습니다.' });
+    socket.emit('room_error', { message: '방이 가득 찼습니다. 최대 8명까지 입장할 수 있습니다.' });
     return;
   }
 
@@ -486,7 +509,7 @@ function startGame(socket: Socket): void {
   }
 
   if (!canStartGame(room)) {
-    socket.emit('room_error', { message: '참가자가 READY 상태여야 게임을 시작할 수 있습니다.' });
+    socket.emit('room_error', { message: '최소 2명 이상 필요하며, 모든 도망자가 READY 상태여야 게임을 시작할 수 있습니다.' });
     return;
   }
 
@@ -504,6 +527,7 @@ function startGame(socket: Socket): void {
 
   emitRoomState(room);
   io.to(room.code).emit('game_started', toPublicRoom(room));
+  scheduleGameTimeout(room.code, room.game.round, room.game.startedAt);
 
   setTimeout(() => {
     const latestRoom = rooms.get(room.code);
@@ -603,7 +627,7 @@ function findTarget(socket: Socket, payload: { targetId?: string } = {}): void {
   room.result = {
     selectedTargetId: targetId,
     success,
-    message: success ? '술래가 숨은 원을 찾았습니다.' : '술래가 원을 찾지 못했습니다.'
+    message: success ? '술래가 도망자의 원을 찾았습니다.' : '술래가 원을 찾지 못했습니다.'
   };
   room.game.phase = 'result';
   room.game.phaseStartedAt = Date.now();
@@ -631,7 +655,7 @@ function confirmFind(socket: Socket): void {
   room.result = {
     selectedTargetId: room.selectedTargetId,
     success,
-    message: success ? '술래가 아티스트의 원을 찾았습니다.' : '술래가 원을 찾지 못했습니다.'
+    message: success ? '술래가 도망자의 원을 찾았습니다.' : '술래가 원을 찾지 못했습니다.'
   };
   room.game.phase = 'result';
   room.game.phaseStartedAt = Date.now();
@@ -672,6 +696,7 @@ function restartGame(socket: Socket): void {
 
   emitRoomState(room);
   io.to(room.code).emit('game_restarted', toPublicRoom(room));
+  scheduleGameTimeout(room.code, room.game.round, room.game.startedAt);
 
   setTimeout(() => {
     const latestRoom = rooms.get(room.code);
