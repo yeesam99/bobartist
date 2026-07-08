@@ -106,7 +106,7 @@ const STORAGE_KEYS = {
 } as const;
 
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3000';
-const VERSION = '0.0.38';
+const VERSION = '0.0.40';
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/jpg'];
 
@@ -119,7 +119,7 @@ app.innerHTML = `
       <div class="title-row">
         <div>
           <p class="eyebrow">BobArtist</p>
-          <h1>v${VERSION} Game Timer Multi Runner</h1>
+          <h1>v${VERSION} Phase Timer UI Engine</h1>
         </div>
         <span id="socketStatus" class="badge badge-wait">연결 대기</span>
       </div>
@@ -183,6 +183,14 @@ app.innerHTML = `
           <p id="gameSubTitle" class="game-subtitle">원본 이미지 위에 내 원형 캐릭터 색칠</p>
         </div>
         <div class="game-header-actions">
+          <div id="topScorePanel" class="top-score-panel">
+            <span id="topScoreLabel">술래 점수</span>
+            <strong id="topScoreView">대기</strong>
+          </div>
+          <div class="top-timer-panel">
+            <span>남은 시간</span>
+            <strong id="topTimerView">--:--</strong>
+          </div>
           <span id="gameRoomCode" class="mini-code">------</span>
           <button id="gameLeaveButton" type="button" class="ghost">방 나가기</button>
         </div>
@@ -295,7 +303,7 @@ app.innerHTML = `
             </div>
           </div>
 
-          <p class="hint">v0.0.38은 5분 제한 시간과 다인 도망자 규칙을 적용한 버전입니다.</p>
+          <p class="hint">v0.0.40은 1분 그리기, 5분 찾기, 상단 고정 HUD를 적용한 버전입니다.</p>
         </aside>
       </section>
     </section>
@@ -328,6 +336,10 @@ const gameTitle = document.querySelector<HTMLHeadingElement>('#gameTitle')!;
 const gameSubTitle = document.querySelector<HTMLParagraphElement>('#gameSubTitle')!;
 const gameRoomCode = document.querySelector<HTMLSpanElement>('#gameRoomCode')!;
 const gameLeaveButton = document.querySelector<HTMLButtonElement>('#gameLeaveButton')!;
+const topScorePanel = document.querySelector<HTMLElement>('#topScorePanel')!;
+const topScoreLabel = document.querySelector<HTMLElement>('#topScoreLabel')!;
+const topScoreView = document.querySelector<HTMLElement>('#topScoreView')!;
+const topTimerView = document.querySelector<HTMLElement>('#topTimerView')!;
 const gameCanvasViewport = document.querySelector<HTMLDivElement>('#gameCanvasViewport')!;
 const spyVisionOverlay = document.querySelector<HTMLDivElement>('#spyVisionOverlay')!;
 const gameCanvas = document.querySelector<HTMLCanvasElement>('#gameCanvas')!;
@@ -408,7 +420,8 @@ let lastRenderedRound = 0;
 let lastFocusPointerSentAt = 0;
 let latestFocusScores: FocusScorePayload | null = null;
 let gameTimerInterval: number | null = null;
-const GAME_DURATION_MS = 5 * 60 * 1000;
+const DECORATE_DURATION_MS = 60 * 1000;
+const FIND_DURATION_MS = 5 * 60 * 1000;
 const SPY_FULL_VIEW_MS = 1000;
 const SPY_DARKEN_MS = 1000;
 const SPY_LIGHT_RADIUS = 170;
@@ -489,10 +502,10 @@ function canArtistDecorate(): boolean {
 
 function getPhaseMessage(phase?: GamePhase): string {
   if (phase === 'role_assignment') return '역할을 배정하는 중입니다. 술래 1명과 도망자 여러 명으로 진행됩니다.';
-  if (phase === 'decorate') return '5분 안에 원을 자연스럽게 숨기고 제출하세요.';
+  if (phase === 'decorate') return '1분 안에 원을 자연스럽게 숨기고 제출하세요.';
   if (phase === 'submit') return '다른 플레이어의 제출을 기다리는 중입니다.';
   if (phase === 'reveal') return '제출 완료. 모든 도망자의 원이 공개되고 술래가 찾기를 준비합니다.';
-  if (phase === 'find') return '술래가 제한 시간 안에 도망자의 원을 선택하는 단계입니다.';
+  if (phase === 'find') return '술래가 5분 안에 모든 도망자의 원을 찾는 단계입니다.';
   if (phase === 'result') return '결과 단계입니다. 시간 초과면 도망자 승리, 모든 도망자를 잡으면 술래 승리입니다.';
   return '게임 상태를 준비하고 있습니다.';
 }
@@ -1081,6 +1094,15 @@ function resetFocusScores(): void {
   latestFocusScores = null;
   focusScoreLabel.textContent = 'Focus Score';
   focusScoreView.textContent = '아직 누적 점수 없음';
+  topScoreLabel.textContent = '술래 점수';
+  topScoreView.textContent = '대기';
+}
+
+function setScoreText(label: string, value: string): void {
+  focusScoreLabel.textContent = label;
+  focusScoreView.textContent = value;
+  topScoreLabel.textContent = label;
+  topScoreView.textContent = value;
 }
 
 function renderFocusScores(): void {
@@ -1089,25 +1111,28 @@ function renderFocusScores(): void {
   const isFindPhase = phase === 'find';
   const canViewFocus = isFindPhase && (me?.role === 'spy' || me?.role === 'artist');
   focusScorePanel.classList.toggle('hidden', !canViewFocus);
-  if (!canViewFocus) return;
+  topScorePanel.classList.toggle('is-active', canViewFocus);
+
+  if (!canViewFocus) {
+    setScoreText('술래 점수', phase === 'result' ? '종료' : '대기');
+    return;
+  }
 
   const scores = latestFocusScores?.scores || [];
 
   if (me?.role === 'artist') {
-    focusScoreLabel.textContent = 'FOCUS SCORE';
     const ownScore = scores[0]?.score || 0;
-    focusScoreView.textContent = `${Math.round(ownScore)}점`;
+    setScoreText('내 점수', `${Math.round(ownScore)}점`);
     return;
   }
 
-  focusScoreLabel.textContent = 'FOCUS SCORE';
   if (latestFocusScores?.audience !== 'spy_snapshot' || !scores.length) {
-    focusScoreView.textContent = '10초마다 누적 점수 공개';
+    setScoreText('술래 점수', '10초마다 공개');
     return;
   }
 
   const totalScore = scores.reduce((sum, item) => sum + item.score, 0);
-  focusScoreView.textContent = `${Math.round(totalScore)}점`;
+  setScoreText('술래 점수', `${Math.round(totalScore)}점`);
 }
 
 function pointInCharacter(x: number, y: number): boolean {
@@ -1162,6 +1187,23 @@ function sampleColor(point: { x: number; y: number }): void {
   updateColorStatus();
   renderGameCanvas();
   setMessage(`스포이드 색상 선택: ${selectedColor.toUpperCase()}`, 'success');
+}
+
+function submitCurrentArtwork(): void {
+  const me = getMe(currentRoom);
+  if (me?.role === 'artist') {
+    socket?.emit('submit_artwork', {
+      character: {
+        xRatio: character.x / gameCanvas.width,
+        yRatio: character.y / gameCanvas.height,
+        radiusRatio: character.radius / Math.min(gameCanvas.width, gameCanvas.height),
+        baseColor: character.baseColor
+      },
+      paintDataUrl: paintCanvas.toDataURL('image/png')
+    });
+    return;
+  }
+  socket?.emit('submit_artwork');
 }
 
 function renderLobbyActions(room: PublicRoom | null): void {
@@ -1233,21 +1275,43 @@ function formatRemainingTime(ms: number): string {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
 
+function getPhaseDurationMs(phase?: GamePhase): number {
+  if (phase === 'decorate' || phase === 'submit') return DECORATE_DURATION_MS;
+  if (phase === 'find') return FIND_DURATION_MS;
+  return 0;
+}
+
 function getRemainingGameTime(room: PublicRoom | null): number {
   if (!room?.game || room.game.phase === 'result') return 0;
-  return Math.max(0, room.game.startedAt + GAME_DURATION_MS - Date.now());
+  const duration = getPhaseDurationMs(room.game.phase);
+  if (duration <= 0) return 0;
+  return Math.max(0, room.game.phaseStartedAt + duration - Date.now());
 }
 
 function renderGameTimer(): void {
   if (!currentRoom?.game) {
-    gameTimerView.textContent = '05:00';
+    gameTimerView.textContent = '--:--';
+    topTimerView.textContent = '--:--';
     return;
   }
   if (currentRoom.game.phase === 'result') {
     gameTimerView.textContent = '종료';
+    topTimerView.textContent = '종료';
     return;
   }
-  gameTimerView.textContent = formatRemainingTime(getRemainingGameTime(currentRoom));
+
+  const duration = getPhaseDurationMs(currentRoom.game.phase);
+  const text = duration > 0 ? formatRemainingTime(getRemainingGameTime(currentRoom)) : '대기';
+  gameTimerView.textContent = text;
+  topTimerView.textContent = text;
+
+  if ((currentRoom.game.phase === 'decorate' || currentRoom.game.phase === 'submit')
+    && duration > 0
+    && getRemainingGameTime(currentRoom) <= 0
+    && getMe(currentRoom)?.role === 'artist'
+    && !getMe(currentRoom)?.submitted) {
+    submitCurrentArtwork();
+  }
 }
 
 function startGameTimerTicker(): void {
@@ -1516,22 +1580,7 @@ leaveRoomButton.addEventListener('click', () => socket?.emit('leave_room'));
 gameLeaveButton.addEventListener('click', () => socket?.emit('leave_room'));
 readyButton.addEventListener('click', () => socket?.emit('toggle_ready'));
 startGameButton.addEventListener('click', () => socket?.emit('start_game'));
-submitArtworkButton.addEventListener('click', () => {
-  const me = getMe(currentRoom);
-  if (me?.role === 'artist') {
-    socket?.emit('submit_artwork', {
-      character: {
-        xRatio: character.x / gameCanvas.width,
-        yRatio: character.y / gameCanvas.height,
-        radiusRatio: character.radius / Math.min(gameCanvas.width, gameCanvas.height),
-        baseColor: character.baseColor
-      },
-      paintDataUrl: paintCanvas.toDataURL('image/png')
-    });
-    return;
-  }
-  socket?.emit('submit_artwork');
-});
+submitArtworkButton.addEventListener('click', () => submitCurrentArtwork());
 confirmFindButton.addEventListener('click', () => socket?.emit('confirm_find'));
 restartGameButton.addEventListener('click', () => socket?.emit('restart_game'));
 roomCodeInput.addEventListener('input', () => { getRoomCode(); });

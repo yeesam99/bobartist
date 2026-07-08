@@ -3,7 +3,7 @@ import cors from 'cors';
 import { createServer } from 'http';
 import { Server, Socket } from 'socket.io';
 
-// BobArtist v0.0.39
+// BobArtist v0.0.40
 // DB 사용 없음: 방 상태와 업로드 이미지는 서버 메모리에만 저장합니다.
 
 type RoomState = 'lobby' | 'playing' | 'ended';
@@ -141,7 +141,7 @@ type PublicRoom = {
   updatedAt: number;
 };
 
-const VERSION = '0.0.39';
+const VERSION = '0.0.40';
 const PORT = Number(process.env.PORT || 3000);
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
 const CLIENT_ORIGINS = CLIENT_ORIGIN === '*'
@@ -149,7 +149,8 @@ const CLIENT_ORIGINS = CLIENT_ORIGIN === '*'
   : CLIENT_ORIGIN.split(',').map((origin) => origin.trim()).filter(Boolean);
 const MIN_PLAYERS = 2;
 const MAX_PLAYERS = 8;
-const GAME_DURATION_MS = 5 * 60 * 1000;
+const DECORATE_DURATION_MS = 60 * 1000;
+const FIND_DURATION_MS = 5 * 60 * 1000;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const ROLE_ASSIGN_DELAY_MS = 900;
 const REVEAL_TO_FIND_DELAY_MS = 2000;
@@ -158,6 +159,7 @@ const FOCUS_RADIUS_PX = 170;
 const FOCUS_MAX_SCORE_PER_TICK = 10;
 const SPY_FOCUS_SNAPSHOT_MS = 10000;
 const ALLOWED_IMAGE_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/jpg']);
+const BLANK_WHITE_PAINT_DATA_URL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAgAAAAIACAIAAAD7GkOtAAAACXBIWXMAAAsTAAALEwEAmpwYAAAHHElEQVR4nO3BMQEAAADCoPVPbQdvoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMBVrgABu0Xl6wAAAABJRU5ErkJggg==';
 
 const app = express();
 app.use(cors({ origin: CLIENT_ORIGINS }));
@@ -306,6 +308,10 @@ function setGamePhase(room: Room, phase: GamePhase): void {
   } else {
     room.lastSpyFocusSnapshotAt = Date.now();
     emitArtistFocusScores(room);
+    scheduleFindTimeout(room.code, room.game.round, room.game.phaseStartedAt);
+  }
+  if (phase === 'decorate') {
+    scheduleDecorateTimeout(room.code, room.game.round, room.game.phaseStartedAt);
   }
   emitRoomState(room);
 }
@@ -318,24 +324,64 @@ function scheduleFindPhase(roomCode: string): void {
   }, REVEAL_TO_FIND_DELAY_MS);
 }
 
-function scheduleGameTimeout(roomCode: string, round: number, startedAt: number): void {
+function ensureMissingRunnerSubmissions(room: Room): void {
+  if (!room.game) return;
+  const now = Date.now();
+  room.players
+    .filter((player) => player.role === 'artist')
+    .forEach((player, index) => {
+      if (room.submissions[player.socketId]) return;
+      const runnerIndex = index + 1;
+      room.submissions[player.socketId] = {
+        playerId: player.socketId,
+        playerName: player.name,
+        character: {
+          xRatio: Math.min(0.86, 0.26 + (runnerIndex * 0.12)),
+          yRatio: Math.min(0.78, 0.30 + ((runnerIndex % 4) * 0.12)),
+          radiusRatio: 0.08,
+          baseColor: '#FFFFFF'
+        },
+        paintDataUrl: BLANK_WHITE_PAINT_DATA_URL,
+        submittedAt: now
+      };
+      player.submitted = true;
+    });
+}
+
+function scheduleDecorateTimeout(roomCode: string, round: number, phaseStartedAt: number): void {
   setTimeout(() => {
     const latestRoom = rooms.get(roomCode);
     if (!latestRoom || latestRoom.state !== 'playing' || !latestRoom.game) return;
-    if (latestRoom.game.round !== round || latestRoom.game.startedAt !== startedAt) return;
-    if (latestRoom.game.phase === 'result') return;
+    if (latestRoom.game.round !== round || latestRoom.game.phaseStartedAt !== phaseStartedAt) return;
+    if (latestRoom.game.phase !== 'decorate' && latestRoom.game.phase !== 'submit') return;
+
+    ensureMissingRunnerSubmissions(latestRoom);
+    latestRoom.game.phase = 'reveal';
+    latestRoom.game.phaseStartedAt = Date.now();
+    latestRoom.updatedAt = Date.now();
+    emitRoomState(latestRoom);
+    scheduleFindPhase(latestRoom.code);
+  }, DECORATE_DURATION_MS);
+}
+
+function scheduleFindTimeout(roomCode: string, round: number, phaseStartedAt: number): void {
+  setTimeout(() => {
+    const latestRoom = rooms.get(roomCode);
+    if (!latestRoom || latestRoom.state !== 'playing' || !latestRoom.game) return;
+    if (latestRoom.game.round !== round || latestRoom.game.phaseStartedAt !== phaseStartedAt) return;
+    if (latestRoom.game.phase !== 'find') return;
 
     latestRoom.selectedTargetId = null;
     latestRoom.result = {
       selectedTargetId: null,
       success: false,
-      message: '제한 시간 5분 종료. 도망자 승리!'
+      message: '찾기 시간 5분 종료. 도망자 승리!'
     };
     latestRoom.game.phase = 'result';
     latestRoom.game.phaseStartedAt = Date.now();
     latestRoom.updatedAt = Date.now();
     emitRoomState(latestRoom);
-  }, GAME_DURATION_MS);
+  }, FIND_DURATION_MS);
 }
 
 function toPublicRoom(room: Room): PublicRoom {
@@ -535,7 +581,6 @@ function startGame(socket: Socket): void {
 
   emitRoomState(room);
   io.to(room.code).emit('game_started', toPublicRoom(room));
-  scheduleGameTimeout(room.code, room.game.round, room.game.startedAt);
 
   setTimeout(() => {
     const latestRoom = rooms.get(room.code);
@@ -592,8 +637,8 @@ function submitArtwork(socket: Socket, payload: { character?: unknown; paintData
 
   player.submitted = true;
   if (room.game.phase === 'decorate') {
+    // Keep phaseStartedAt from DECORATE so submitting early does not extend the 1-minute drawing timer.
     room.game.phase = 'submit';
-    room.game.phaseStartedAt = Date.now();
   }
 
   if (room.players.every((item) => item.submitted)) {
@@ -722,7 +767,6 @@ function restartGame(socket: Socket): void {
 
   emitRoomState(room);
   io.to(room.code).emit('game_restarted', toPublicRoom(room));
-  scheduleGameTimeout(room.code, room.game.round, room.game.startedAt);
 
   setTimeout(() => {
     const latestRoom = rooms.get(room.code);
