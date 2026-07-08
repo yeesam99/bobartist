@@ -1,6 +1,6 @@
 {
   "name": "bobartist",
-  "version": "0.0.34",
+  "version": "0.0.32",
   "private": true,
   "description": "BobArtist real-time hide-and-find drawing game",
   "engines": {

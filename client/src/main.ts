@@ -104,12 +104,11 @@ const STORAGE_KEYS = {
 } as const;
 
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3000';
-const VERSION = '0.0.34';
+const VERSION = '0.0.33';
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/jpg'];
 const SPY_CIRCLE_EDGE_FEATHER_PX = 5;
 const SPY_CIRCLE_EDGE_GUARD_PX = 1.25;
-const GAME_DURATION_MS = 5 * 60 * 1000;
 
 const app = document.querySelector<HTMLDivElement>('#app');
 if (!app) throw new Error('#app element not found');
@@ -120,7 +119,7 @@ app.innerHTML = `
       <div class="title-row">
         <div>
           <p class="eyebrow">BobArtist</p>
-          <h1>v${VERSION} Multi Runner Timer Engine</h1>
+          <h1>v${VERSION} Focus Score UI Engine</h1>
         </div>
         <span id="socketStatus" class="badge badge-wait">연결 대기</span>
       </div>
@@ -465,25 +464,12 @@ function canArtistDecorate(): boolean {
   return isArtistPlayer() && (phase === 'decorate' || phase === 'submit');
 }
 
-function formatGameTime(ms: number): string {
-  const safeMs = Math.max(0, ms);
-  const totalSeconds = Math.ceil(safeMs / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}:${String(seconds).padStart(2, '0')}`;
-}
-
-function getRemainingGameMs(room: PublicRoom): number {
-  if (!room.game || room.game.phase === 'result') return 0;
-  return Math.max(0, GAME_DURATION_MS - (Date.now() - room.game.startedAt));
-}
-
 function getPhaseMessage(phase?: GamePhase): string {
-  if (phase === 'role_assignment') return '역할을 배정하는 중입니다. 술래 1명, 나머지는 도망자입니다.';
-  if (phase === 'decorate') return '5분 안에 원을 자연스럽게 숨기도록 꾸미고 제출하세요.';
+  if (phase === 'role_assignment') return '역할을 배정하는 중입니다. 이번 버전은 방장이 술래입니다.';
+  if (phase === 'decorate') return '원을 자연스럽게 숨기도록 꾸미고 제출하세요.';
   if (phase === 'submit') return '다른 플레이어의 제출을 기다리는 중입니다.';
   if (phase === 'reveal') return '제출 완료. 모든 원이 공개되고 술래가 찾기를 준비합니다.';
-  if (phase === 'find') return '술래가 제한시간 안에 도망자의 원을 선택하는 단계입니다.';
+  if (phase === 'find') return '술래가 조준경 커서로 숨은 원을 선택하는 단계입니다.';
   if (phase === 'result') return '결과 단계입니다. 방장만 다시 시작하여 다음 라운드를 열 수 있습니다.';
   return '게임 상태를 준비하고 있습니다.';
 }
@@ -538,7 +524,7 @@ function drawEmptyLobbyCanvas(): void {
   lobbyCtx.lineWidth = 3;
   lobbyCtx.strokeRect(48, 152, 624, 210);
   lobbyCtx.font = '16px Arial';
-  lobbyCtx.fillText(`v${VERSION} 목표: 5분 타이머 + 다인 도망자`, 78, 208);
+  lobbyCtx.fillText(`v${VERSION} 목표: Focus Score UI Engine`, 78, 208);
 }
 
 async function drawSelectedArtworkPreview(): Promise<void> {
@@ -1159,10 +1145,10 @@ function renderLobbyActions(room: PublicRoom | null): void {
 
   if (!room) {
     startHint.textContent = '방에 입장하면 참가자는 준비할 수 있습니다.';
-  } else if (isHost && room.playerCount < 2) {
-    startHint.textContent = `도망자 1명 이상 입장하면 게임을 시작할 수 있습니다. 최대 ${room.maxPlayers}명까지 가능`; 
+  } else if (isHost && room.playerCount < room.maxPlayers) {
+    startHint.textContent = '참가자 1명이 입장하면 게임을 시작할 수 있습니다.';
   } else if (isHost && !room.canStart) {
-    startHint.textContent = '모든 도망자 READY를 기다리는 중입니다. 방장은 술래라 준비 버튼이 필요 없습니다.';
+    startHint.textContent = '참가자 READY를 기다리는 중입니다. 방장은 준비 버튼이 필요 없습니다.';
   } else if (isHost) {
     startHint.textContent = '참가자 준비 완료. 방장이 게임을 시작할 수 있습니다.';
   } else if (!me?.ready) {
@@ -1185,7 +1171,7 @@ function renderLobbyRoom(room: PublicRoom | null): void {
     return;
   }
 
-  roomTitle.textContent = `${room.playerCount}/${room.maxPlayers}명 연결됨 · 술래 1명`; 
+  roomTitle.textContent = `${room.playerCount}/${room.maxPlayers}명 연결됨`;
   roomCodeView.textContent = room.code;
   phaseView.textContent = getStateLabel(room.state);
   phaseView.className = `phase phase-${room.state}`;
@@ -1194,7 +1180,7 @@ function renderLobbyRoom(room: PublicRoom | null): void {
   localStorage.setItem(STORAGE_KEYS.lastRoomCode, room.code);
 
   playerList.innerHTML = room.players.map((player) => {
-    const me = player.id === mySocketId ? '나' : '플레이어';
+    const me = player.id === mySocketId ? '나' : '상대';
     const host = player.isHost ? '👑 방장' : '참가자';
     const ready = player.isHost ? '🟣 AUTO READY' : (player.ready ? '🟢 READY' : '⚪ NOT READY');
     const role = player.role ? ` · ${getRoleLabel(player.role)}` : '';
@@ -1220,10 +1206,7 @@ function renderGameRoom(room: PublicRoom): void {
   const canRestart = isHost && phase === 'result';
 
   gameTitle.textContent = `ROUND ${room.game?.round || 1} · ${phaseLabel}`;
-  const remaining = getRemainingGameMs(room);
-  gameSubTitle.textContent = phase === 'result'
-    ? getPhaseMessage(phase)
-    : `${getPhaseMessage(phase)} · 남은 시간 ${formatGameTime(remaining)}`;
+  gameSubTitle.textContent = getPhaseMessage(phase);
   gameRoomCode.textContent = room.code;
   gamePhaseView.textContent = phaseLabel;
   gameArtworkNameView.textContent = room.game?.artwork.fileName || room.artwork.fileName;
@@ -1247,7 +1230,7 @@ function renderGameRoom(room: PublicRoom): void {
   renderFocusScores();
 
   if (phase === 'result' && room.game?.result) {
-    submitStatusView.textContent = room.game.result.success ? `🎯 술래 승: ${room.game.result.message}` : `🏃 도망자 승: ${room.game.result.message}`;
+    submitStatusView.textContent = room.game.result.success ? `🎯 성공: ${room.game.result.message}` : `❌ 실패: ${room.game.result.message}`;
   } else if (phase === 'find' && room.game?.selectedTargetId) {
     const selected = room.players.find((player) => player.id === room.game?.selectedTargetId);
     submitStatusView.textContent = `선택됨: ${selected?.name || '알 수 없음'} · 선택 확정을 누르세요.`;
@@ -1650,9 +1633,3 @@ updateColorStatus();
 updateToolHint('Restart Engine: RESULT 이후 방장만 새 라운드를 시작합니다.');
 drawEmptyLobbyCanvas();
 connectSocket();
-
-setInterval(() => {
-  if (currentRoom?.state === 'playing' && currentRoom.game?.phase !== 'result') {
-    renderGameRoom(currentRoom);
-  }
-}, 1000);
