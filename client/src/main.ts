@@ -36,6 +36,11 @@ type CharacterSnapshot = {
   baseColor: string;
 };
 
+const RUNNER_CIRCLE_MIN_SIZE = 50;
+const RUNNER_CIRCLE_MAX_SIZE = 150;
+const RUNNER_CIRCLE_MIN_RADIUS = RUNNER_CIRCLE_MIN_SIZE / 2;
+const RUNNER_CIRCLE_MAX_RADIUS = RUNNER_CIRCLE_MAX_SIZE / 2;
+
 type ArtworkSubmission = {
   playerId: string;
   playerName: string;
@@ -274,7 +279,7 @@ app.innerHTML = `
           </div>
           <div class="range-control">
             <label for="characterSizeInput">원 크기 <strong id="characterSizeView">116px</strong></label>
-            <input id="characterSizeInput" type="range" min="20" max="200" value="116" />
+            <input id="characterSizeInput" type="range" min="50" max="150" value="116" />
           </div>
           <p id="toolHint" class="mission-message">기본은 항상 붓입니다. Space로 색을 가져오고 WASD로 이동합니다.</p>
 
@@ -1316,11 +1321,14 @@ function setScoreText(label: string, value: string): void {
 
 function ensureCharacterInsideCanvas(): void {
   if (!gameCanvas.width || !gameCanvas.height) return;
-  const maxRadius = Math.max(
-    20,
-    Math.min(200, Math.min(gameCanvas.width, gameCanvas.height) * 0.35),
+  const maxRadius = Math.min(
+    RUNNER_CIRCLE_MAX_RADIUS,
+    Math.min(gameCanvas.width, gameCanvas.height) / 2,
   );
-  character.radius = Math.min(maxRadius, Math.max(10, character.radius));
+  character.radius = Math.min(
+    maxRadius,
+    Math.max(RUNNER_CIRCLE_MIN_RADIUS, character.radius),
+  );
   character.x = Math.min(
     gameCanvas.width - character.radius,
     Math.max(character.radius, character.x),
@@ -1446,6 +1454,8 @@ function submitCurrentArtwork(): void {
           character.radius / Math.min(gameCanvas.width, gameCanvas.height),
         baseColor: character.baseColor,
       },
+      canvasWidth: gameCanvas.width,
+      canvasHeight: gameCanvas.height,
       paintDataUrl: paintCanvas.toDataURL("image/png"),
     });
     return;
@@ -2107,7 +2117,10 @@ document.addEventListener("keydown", (event) => {
     if (!canArtistDecorate()) return;
     event.preventDefault();
     const delta = key === "e" ? 2 : -2;
-    character.radius = Math.min(100, Math.max(10, character.radius + delta));
+    character.radius = Math.min(
+      RUNNER_CIRCLE_MAX_RADIUS,
+      Math.max(RUNNER_CIRCLE_MIN_RADIUS, character.radius + delta),
+    );
     characterSizeInput.value = String(character.radius * 2);
     updateCharacterSizeStatus();
     flashHud(sizeHud);

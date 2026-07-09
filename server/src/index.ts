@@ -41,6 +41,11 @@ type CharacterSnapshot = {
   baseColor: string;
 };
 
+const RUNNER_CIRCLE_MIN_SIZE = 50;
+const RUNNER_CIRCLE_MAX_SIZE = 150;
+const RUNNER_CIRCLE_MIN_RADIUS = RUNNER_CIRCLE_MIN_SIZE / 2;
+const RUNNER_CIRCLE_MAX_RADIUS = RUNNER_CIRCLE_MAX_SIZE / 2;
+
 type ArtworkSubmission = {
   playerId: string;
   playerName: string;
@@ -761,7 +766,11 @@ function startGame(socket: Socket): void {
   }, ROLE_ASSIGN_DELAY_MS);
 }
 
-function normalizeSnapshot(value: unknown): CharacterSnapshot | null {
+function normalizeSnapshot(
+  value: unknown,
+  canvasWidth?: unknown,
+  canvasHeight?: unknown,
+): CharacterSnapshot | null {
   if (!value || typeof value !== "object") return null;
   const item = value as Partial<CharacterSnapshot>;
   const xRatio = Number(item.xRatio);
@@ -773,10 +782,22 @@ function normalizeSnapshot(value: unknown): CharacterSnapshot | null {
     !Number.isFinite(radiusRatio)
   )
     return null;
+  const width = Number(canvasWidth);
+  const height = Number(canvasHeight);
+  const minCanvasSize =
+    Number.isFinite(width) &&
+    Number.isFinite(height) &&
+    width > 0 &&
+    height > 0
+      ? Math.min(width, height)
+      : 500;
+  const minRadiusRatio = RUNNER_CIRCLE_MIN_RADIUS / minCanvasSize;
+  const maxRadiusRatio = RUNNER_CIRCLE_MAX_RADIUS / minCanvasSize;
+
   return {
     xRatio: Math.min(1, Math.max(0, xRatio)),
     yRatio: Math.min(1, Math.max(0, yRatio)),
-    radiusRatio: Math.min(0.35, Math.max(0.01, radiusRatio)),
+    radiusRatio: Math.min(maxRadiusRatio, Math.max(minRadiusRatio, radiusRatio)),
     baseColor:
       typeof item.baseColor === "string"
         ? item.baseColor.slice(0, 32)
@@ -786,7 +807,12 @@ function normalizeSnapshot(value: unknown): CharacterSnapshot | null {
 
 function submitArtwork(
   socket: Socket,
-  payload: { character?: unknown; paintDataUrl?: string } = {},
+  payload: {
+    character?: unknown;
+    canvasWidth?: unknown;
+    canvasHeight?: unknown;
+    paintDataUrl?: string;
+  } = {},
 ): void {
   const room = findJoinedRoom(socket);
   if (!room || room.state !== "playing" || !room.game) {
@@ -805,7 +831,11 @@ function submitArtwork(
   if (!player) return;
 
   if (player.role === "artist") {
-    const character = normalizeSnapshot(payload.character);
+    const character = normalizeSnapshot(
+      payload.character,
+      payload.canvasWidth,
+      payload.canvasHeight,
+    );
     const paintDataUrl =
       typeof payload.paintDataUrl === "string" ? payload.paintDataUrl : "";
     if (!character || !paintDataUrl.startsWith("data:image/png;base64,")) {
