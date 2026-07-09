@@ -1354,7 +1354,7 @@ function renderFocusScores(): void {
   }
 
   if (latestFocusScores?.audience !== "spy_snapshot" || !scores.length) {
-    setScoreText("술래 점수", "10초마다 공개");
+    setScoreText("술래 점수", "5초마다 공개");
     return;
   }
 

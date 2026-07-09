@@ -187,7 +187,7 @@ const REVEAL_TO_FIND_DELAY_MS = 2000;
 const FOCUS_SCORE_TICK_MS = 1000;
 const FOCUS_RADIUS_PX = 170;
 const FOCUS_MAX_SCORE_PER_TICK = 10;
-const SPY_FOCUS_SNAPSHOT_MS = 10000;
+const SPY_FOCUS_SNAPSHOT_MS = 5000;
 const ALLOWED_IMAGE_MIME_TYPES = new Set([
   "image/png",
   "image/jpeg",
