@@ -1283,3 +1283,190 @@ kbd {
     grid-template-columns: 1fr;
   }
 }
+
+/* v0.0.49: keep active game screen inside the browser viewport */
+body:has(#gamePage:not(.hidden)) {
+  overflow: hidden;
+}
+
+#gamePage:not(.hidden) {
+  width: 100vw;
+  height: 100vh;
+  max-width: none;
+  margin: 0;
+  padding: 6px 10px;
+  overflow: hidden;
+}
+
+#gamePage:not(.hidden) .game-shell {
+  height: calc(100vh - 12px);
+  min-height: 0;
+  max-height: calc(100vh - 12px);
+  padding: 8px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#gamePage:not(.hidden) .game-header {
+  position: relative;
+  top: auto;
+  flex: 0 0 auto;
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  gap: 10px;
+}
+
+#gamePage:not(.hidden) .game-header h1 {
+  font-size: clamp(22px, 2.6vw, 34px);
+}
+
+#gamePage:not(.hidden) .game-subtitle {
+  font-size: 12px;
+}
+
+#gamePage:not(.hidden) .game-header-actions {
+  gap: 6px;
+}
+
+#gamePage:not(.hidden) .top-action-panel {
+  gap: 6px;
+}
+
+#gamePage:not(.hidden) .top-action-panel button,
+#gamePage:not(.hidden) .game-header-actions > .ghost {
+  min-width: 88px;
+  padding: 8px 10px;
+  border-radius: 12px;
+}
+
+#gamePage:not(.hidden) .top-action-status {
+  font-size: 11px;
+  min-height: 15px;
+}
+
+#gamePage:not(.hidden) .top-score-panel,
+#gamePage:not(.hidden) .top-timer-panel {
+  min-width: 104px;
+  padding: 7px 10px;
+  border-radius: 14px;
+}
+
+#gamePage:not(.hidden) .top-score-panel strong,
+#gamePage:not(.hidden) .top-timer-panel strong {
+  font-size: 17px;
+}
+
+#gamePage:not(.hidden) .mini-code {
+  min-width: 92px;
+  padding: 8px 10px;
+  font-size: 16px;
+}
+
+#gamePage:not(.hidden) .game-layout {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  grid-template-columns: minmax(0, 1fr) clamp(230px, 15vw, 282px);
+  gap: 10px;
+  align-items: stretch;
+  overflow: hidden;
+}
+
+#gamePage:not(.hidden) .draw-card,
+#gamePage:not(.hidden) .mission-card {
+  min-height: 0;
+  max-height: 100%;
+  overflow: hidden;
+}
+
+#gamePage:not(.hidden) .draw-card {
+  padding: 8px;
+}
+
+#gamePage:not(.hidden) .draw-toolbar {
+  flex: 0 0 auto;
+  margin-bottom: 6px;
+}
+
+#gamePage:not(.hidden) .game-canvas-viewport {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  overflow: auto;
+}
+
+#gamePage:not(.hidden) .mission-card {
+  padding: 10px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+#gamePage:not(.hidden) .mission-card h2 {
+  font-size: 18px;
+}
+
+#gamePage:not(.hidden) .role-card,
+#gamePage:not(.hidden) .color-status,
+#gamePage:not(.hidden) .range-control,
+#gamePage:not(.hidden) .hud-grid,
+#gamePage:not(.hidden) .game-info-list {
+  margin-top: 8px;
+  margin-bottom: 8px;
+}
+
+#gamePage:not(.hidden) .role-card,
+#gamePage:not(.hidden) .color-status,
+#gamePage:not(.hidden) .range-control,
+#gamePage:not(.hidden) .hud-card,
+#gamePage:not(.hidden) .game-info-list div {
+  padding: 7px;
+}
+
+#gamePage:not(.hidden) .mission-message,
+#gamePage:not(.hidden) .mission-card .hint,
+#gamePage:not(.hidden) .hud-card p {
+  font-size: 10.5px;
+  line-height: 1.3;
+}
+
+#gamePage:not(.hidden) .key-row {
+  margin: 4px 0;
+}
+
+#gamePage:not(.hidden) kbd {
+  min-width: 22px;
+  min-height: 20px;
+  padding: 1px 5px;
+  font-size: 10px;
+}
+
+@media (max-width: 980px) {
+  body:has(#gamePage:not(.hidden)) {
+    overflow: auto;
+  }
+
+  #gamePage:not(.hidden) {
+    width: calc(100% - 12px);
+    height: auto;
+    min-height: 100vh;
+    margin: 0 auto;
+    padding: 6px 0;
+    overflow: visible;
+  }
+
+  #gamePage:not(.hidden) .game-shell {
+    height: auto;
+    max-height: none;
+    overflow: visible;
+  }
+
+  #gamePage:not(.hidden) .game-layout {
+    grid-template-columns: 1fr;
+    overflow: visible;
+  }
+
+  #gamePage:not(.hidden) .mission-card {
+    max-height: none;
+  }
+}

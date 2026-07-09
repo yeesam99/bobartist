@@ -124,7 +124,7 @@ const STORAGE_KEYS = {
 } as const;
 
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || "http://localhost:3000";
-const VERSION = "0.0.44";
+const VERSION = "0.0.49";
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/jpg"];
 
@@ -344,7 +344,7 @@ app.innerHTML = `
             </div>
           </div>
 
-          <p class="hint">v0.0.44는 로비 시간 설정과 첫 술래 랜덤 배정을 추가한 버전입니다.</p>
+          <p class="hint">v0.0.49는 화면 버전 표기를 실제 배포 버전과 맞춘 버전입니다.</p>
         </aside>
       </section>
     </section>
