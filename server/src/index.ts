@@ -3,7 +3,7 @@ import cors from "cors";
 import { createServer } from "http";
 import { Server, Socket } from "socket.io";
 
-// BobArtist v0.0.49
+// BobArtist v0.0.50
 // DB 사용 없음: 방 상태와 업로드 이미지는 서버 메모리에만 저장합니다.
 
 type RoomState = "lobby" | "playing" | "ended";
@@ -74,6 +74,16 @@ type FocusScoreItem = {
   score: number;
 };
 
+type SurvivalRankingItem = {
+  playerId: string;
+  playerName: string;
+  rank: number;
+  survivalMs: number;
+  circleSizePx: number;
+  sizeBonusMs: number;
+  score: number;
+};
+
 type GameRound = {
   round: number;
   phase: GamePhase;
@@ -97,8 +107,10 @@ type Room = {
   game: GameRound | null;
   submissions: Record<string, ArtworkSubmission>;
   caughtTargetIds: string[];
+  caughtAtByTargetId: Record<string, number>;
   selectedTargetId: string | null;
   result: FindResult | null;
+  resultRankings: SurvivalRankingItem[];
   focusScores: Record<string, number>;
   focusPointer: FocusPointer | null;
   lastSpyFocusSnapshotAt: number;
@@ -156,12 +168,13 @@ type PublicRoom = {
     caughtTargetIds: string[];
     selectedTargetId: string | null;
     result: FindResult | null;
+    resultRankings: SurvivalRankingItem[];
   };
   createdAt: number;
   updatedAt: number;
 };
 
-const VERSION = "0.0.49";
+const VERSION = "0.0.50";
 const DEFAULT_DECORATE_DURATION_MS = 60 * 1000;
 const DEFAULT_FIND_DURATION_MS = 5 * 60 * 1000;
 const ALLOWED_DECORATE_DURATION_MS = new Set([
@@ -193,6 +206,7 @@ const FOCUS_SCORE_TICK_MS = 1000;
 const FOCUS_RADIUS_PX = 170;
 const FOCUS_MAX_SCORE_PER_TICK = 10;
 const SPY_FOCUS_SNAPSHOT_MS = 5000;
+const MAX_SIZE_BONUS_MS = 12 * 1000;
 const ALLOWED_IMAGE_MIME_TYPES = new Set([
   "image/png",
   "image/jpeg",
@@ -357,8 +371,10 @@ function assignRoles(room: Room): void {
   });
   room.submissions = {};
   room.caughtTargetIds = [];
+  room.caughtAtByTargetId = {};
   room.selectedTargetId = null;
   room.result = null;
+  room.resultRankings = [];
   room.focusScores = {};
   room.focusPointer = null;
   room.lastSpyFocusSnapshotAt = 0;
@@ -520,14 +536,16 @@ function scheduleFindTimeout(
       return;
     if (latestRoom.game.phase !== "find") return;
 
+    const endedAt = Date.now();
     latestRoom.selectedTargetId = null;
+    latestRoom.resultRankings = computeSurvivalRankings(latestRoom, endedAt);
     latestRoom.result = {
       selectedTargetId: null,
       success: false,
       message: `찾기 시간 ${formatMinutes(latestRoom.settings.findDurationMs)} 종료. 도망자 승리!`,
     };
     latestRoom.game.phase = "result";
-    latestRoom.game.phaseStartedAt = Date.now();
+    latestRoom.game.phaseStartedAt = endedAt;
     latestRoom.updatedAt = Date.now();
     emitRoomState(latestRoom);
   }, delayMs);
@@ -564,6 +582,7 @@ function toPublicRoom(room: Room): PublicRoom {
           caughtTargetIds: [...room.caughtTargetIds],
           selectedTargetId: room.selectedTargetId,
           result: room.result,
+        resultRankings: [...room.resultRankings],
         }
       : null,
     createdAt: room.createdAt,
@@ -615,8 +634,10 @@ function leaveJoinedRooms(socket: Socket): void {
       room.game = null;
       room.submissions = {};
       room.caughtTargetIds = [];
+      room.caughtAtByTargetId = {};
       room.selectedTargetId = null;
       room.result = null;
+      room.resultRankings = [];
       room.focusScores = {};
       room.focusPointer = null;
       room.lastSpyFocusSnapshotAt = 0;
@@ -928,17 +949,20 @@ function findTarget(socket: Socket, payload: { targetId?: string } = {}): void {
     return;
   }
 
+  const caughtAt = Date.now();
   room.selectedTargetId = targetId;
   room.caughtTargetIds.push(targetId);
+  room.caughtAtByTargetId[targetId] = caughtAt;
 
   if (areAllRunnersCaught(room)) {
+    room.resultRankings = computeSurvivalRankings(room, caughtAt);
     room.result = {
       selectedTargetId: targetId,
       success: true,
       message: `도망자 ${getCaughtRunnerCount(room)}명을 모두 잡았습니다. 술래 승리!`,
     };
     room.game.phase = "result";
-    room.game.phaseStartedAt = Date.now();
+    room.game.phaseStartedAt = caughtAt;
   } else {
     room.result = null;
   }
@@ -1075,6 +1099,55 @@ function updateFocusPointer(
     canvasHeight: Math.min(5000, Math.max(1, canvasHeight)),
     updatedAt: Date.now(),
   };
+}
+
+function getSubmissionCircleSizePx(submission: ArtworkSubmission): number {
+  const fallbackCanvasSize = 760;
+  const rawSize = submission.character.radiusRatio * fallbackCanvasSize * 2;
+  return Math.round(
+    Math.min(
+      RUNNER_CIRCLE_MAX_SIZE,
+      Math.max(RUNNER_CIRCLE_MIN_SIZE, Number.isFinite(rawSize) ? rawSize : RUNNER_CIRCLE_MIN_SIZE),
+    ),
+  );
+}
+
+function getSizeBonusMs(circleSizePx: number): number {
+  const range = RUNNER_CIRCLE_MAX_SIZE - RUNNER_CIRCLE_MIN_SIZE;
+  if (range <= 0) return 0;
+  const normalized =
+    (Math.min(RUNNER_CIRCLE_MAX_SIZE, Math.max(RUNNER_CIRCLE_MIN_SIZE, circleSizePx)) -
+      RUNNER_CIRCLE_MIN_SIZE) /
+    range;
+  return Math.round(normalized * MAX_SIZE_BONUS_MS);
+}
+
+function computeSurvivalRankings(room: Room, endedAt: number): SurvivalRankingItem[] {
+  if (!room.game) return [];
+  const findStartedAt = room.game.phase === "find" ? room.game.phaseStartedAt : room.game.startedAt;
+  return Object.values(room.submissions)
+    .map((submission) => {
+      const survivalEndedAt = room.caughtAtByTargetId[submission.playerId] || endedAt;
+      const survivalMs = Math.max(0, survivalEndedAt - findStartedAt);
+      const circleSizePx = getSubmissionCircleSizePx(submission);
+      const sizeBonusMs = getSizeBonusMs(circleSizePx);
+      return {
+        playerId: submission.playerId,
+        playerName: submission.playerName,
+        rank: 0,
+        survivalMs,
+        circleSizePx,
+        sizeBonusMs,
+        score: survivalMs + sizeBonusMs,
+      };
+    })
+    .sort((a, b) =>
+      b.score - a.score ||
+      b.survivalMs - a.survivalMs ||
+      b.circleSizePx - a.circleSizePx ||
+      a.playerName.localeCompare(b.playerName),
+    )
+    .map((item, index) => ({ ...item, rank: index + 1 }));
 }
 
 function getFocusScoreItems(room: Room): FocusScoreItem[] {
@@ -1238,8 +1311,10 @@ io.on("connection", (socket) => {
         game: null,
         submissions: {},
         caughtTargetIds: [],
+        caughtAtByTargetId: {},
         selectedTargetId: null,
         result: null,
+        resultRankings: [],
         focusScores: {},
         focusPointer: null,
         lastSpyFocusSnapshotAt: 0,

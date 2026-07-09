@@ -1470,3 +1470,8 @@ body:has(#gamePage:not(.hidden)) {
     max-height: none;
   }
 }
+
+/* v0.0.50: show compact hide ranking lines in the result status */
+.top-action-status {
+  white-space: pre-line;
+}

@@ -75,6 +75,7 @@ type PublicRoom = {
     caughtTargetIds: string[];
     selectedTargetId: string | null;
     result: FindResult | null;
+    resultRankings: SurvivalRankingItem[];
   };
   createdAt: number;
   updatedAt: number;
@@ -111,6 +112,16 @@ type FocusScorePayload = {
   scores: FocusScoreItem[];
 };
 
+type SurvivalRankingItem = {
+  playerId: string;
+  playerName: string;
+  rank: number;
+  survivalMs: number;
+  circleSizePx: number;
+  sizeBonusMs: number;
+  score: number;
+};
+
 type CharacterState = {
   x: number;
   y: number;
@@ -124,7 +135,7 @@ const STORAGE_KEYS = {
 } as const;
 
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || "http://localhost:3000";
-const VERSION = "0.0.49";
+const VERSION = "0.0.50";
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/jpg"];
 
@@ -137,7 +148,7 @@ app.innerHTML = `
       <div class="title-row">
         <div>
           <p class="eyebrow">BobArtist</p>
-          <h1>v${VERSION} Lobby Timer Engine</h1>
+          <h1>v${VERSION} Hide Ranking Engine</h1>
         </div>
         <span id="socketStatus" class="badge badge-wait">연결 대기</span>
       </div>
@@ -344,7 +355,7 @@ app.innerHTML = `
             </div>
           </div>
 
-          <p class="hint">v0.0.49는 화면 버전 표기를 실제 배포 버전과 맞춘 버전입니다.</p>
+          <p class="hint">v0.0.50은 은신 시간과 원 크기를 함께 반영한 순위 버전입니다.</p>
         </aside>
       </section>
     </section>
@@ -702,7 +713,7 @@ function drawEmptyLobbyCanvas(): void {
   lobbyCtx.lineWidth = 3;
   lobbyCtx.strokeRect(48, 152, 624, 210);
   lobbyCtx.font = "16px Arial";
-  lobbyCtx.fillText(`v${VERSION} 목표: Focus Score UI Engine`, 78, 208);
+  lobbyCtx.fillText(`v${VERSION} 목표: Hide Ranking Engine`, 78, 208);
 }
 
 async function drawSelectedArtworkPreview(): Promise<void> {
@@ -1667,6 +1678,25 @@ function stopGameTimerTicker(): void {
   gameTimerInterval = null;
 }
 
+function formatRecordTime(ms: number): string {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+function formatSurvivalRankings(rankings?: SurvivalRankingItem[]): string {
+  const topRankings = (rankings || []).slice(0, 3);
+  if (!topRankings.length) return "";
+  const medals = ["🥇", "🥈", "🥉"];
+  return topRankings
+    .map(
+      (item, index) =>
+        `${medals[index] || `${item.rank}위`} ${item.playerName} · ${formatRecordTime(item.survivalMs)} · ${item.circleSizePx}px`,
+    )
+    .join("\n");
+}
+
 function renderGameRoom(room: PublicRoom): void {
   showGamePage();
   const me = getMe(room);
@@ -1720,9 +1750,12 @@ function renderGameRoom(room: PublicRoom): void {
   renderFocusScores();
 
   if (phase === "result" && room.game?.result) {
-    submitStatusView.textContent = room.game.result.success
-      ? `🎯 술래 승리: ${room.game.result.message}`
-      : `🏃 도망자 승리: ${room.game.result.message}`;
+    const rankingText = formatSurvivalRankings(room.game.resultRankings);
+    submitStatusView.textContent = rankingText
+      ? `🏆 은신 순위\n${rankingText}`
+      : room.game.result.success
+        ? `🎯 술래 승리: ${room.game.result.message}`
+        : `🏃 도망자 승리: ${room.game.result.message}`;
   } else if (phase === "find") {
     const caughtIds = room.game?.caughtTargetIds || [];
     const runnerCount = room.players.filter(
