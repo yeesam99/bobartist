@@ -1,14 +1,21 @@
-import express from 'express';
-import cors from 'cors';
-import { createServer } from 'http';
-import { Server, Socket } from 'socket.io';
+import express from "express";
+import cors from "cors";
+import { createServer } from "http";
+import { Server, Socket } from "socket.io";
 
-// BobArtist v0.0.43
+// BobArtist v0.0.44
 // DB 사용 없음: 방 상태와 업로드 이미지는 서버 메모리에만 저장합니다.
 
-type RoomState = 'lobby' | 'playing' | 'ended';
-type GamePhase = 'loading' | 'role_assignment' | 'decorate' | 'submit' | 'reveal' | 'find' | 'result';
-type PlayerRole = 'artist' | 'spy';
+type RoomState = "lobby" | "playing" | "ended";
+type GamePhase =
+  | "loading"
+  | "role_assignment"
+  | "decorate"
+  | "submit"
+  | "reveal"
+  | "find"
+  | "result";
+type PlayerRole = "artist" | "spy";
 
 type Player = {
   socketId: string;
@@ -70,12 +77,18 @@ type GameRound = {
   artwork: Artwork;
 };
 
+type GameSettings = {
+  decorateDurationMs: number;
+  findDurationMs: number;
+};
+
 type Room = {
   code: string;
   hostSocketId: string;
   state: RoomState;
   players: Player[];
   artwork: Artwork;
+  settings: GameSettings;
   game: GameRound | null;
   submissions: Record<string, ArtworkSubmission>;
   caughtTargetIds: string[];
@@ -103,6 +116,7 @@ type ClientRoomRequest = {
 };
 
 type CreateRoomRequest = ClientRoomRequest & {
+  settings?: Partial<GameSettings>;
   artwork?: {
     dataUrl?: string;
     fileName?: string;
@@ -126,6 +140,7 @@ type PublicRoom = {
     submitted: boolean;
   }>;
   artwork: Artwork;
+  settings: GameSettings;
   game: null | {
     round: number;
     phase: GamePhase;
@@ -141,16 +156,30 @@ type PublicRoom = {
   updatedAt: number;
 };
 
-const VERSION = '0.0.43';
+const VERSION = "0.0.44";
+const DEFAULT_DECORATE_DURATION_MS = 60 * 1000;
+const DEFAULT_FIND_DURATION_MS = 5 * 60 * 1000;
+const ALLOWED_DECORATE_DURATION_MS = new Set([
+  60 * 1000,
+  2 * 60 * 1000,
+  3 * 60 * 1000,
+]);
+const ALLOWED_FIND_DURATION_MS = new Set([
+  3 * 60 * 1000,
+  5 * 60 * 1000,
+  7 * 60 * 1000,
+]);
 const PORT = Number(process.env.PORT || 3000);
-const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
-const CLIENT_ORIGINS = CLIENT_ORIGIN === '*'
-  ? '*'
-  : CLIENT_ORIGIN.split(',').map((origin) => origin.trim()).filter(Boolean);
+const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || "http://localhost:5173";
+const CLIENT_ORIGINS =
+  CLIENT_ORIGIN === "*"
+    ? "*"
+    : CLIENT_ORIGIN.split(",")
+        .map((origin) => origin.trim())
+        .filter(Boolean);
 const MIN_PLAYERS = 2;
 const MAX_PLAYERS = 8;
-const DECORATE_DURATION_MS = 60 * 1000;
-const FIND_DURATION_MS = 5 * 60 * 1000;
+
 const AUTO_SUBMIT_GRACE_MS = 900;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const ROLE_ASSIGN_DELAY_MS = 900;
@@ -159,23 +188,28 @@ const FOCUS_SCORE_TICK_MS = 1000;
 const FOCUS_RADIUS_PX = 170;
 const FOCUS_MAX_SCORE_PER_TICK = 10;
 const SPY_FOCUS_SNAPSHOT_MS = 10000;
-const ALLOWED_IMAGE_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/jpg']);
-const BLANK_WHITE_PAINT_DATA_URL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAgAAAAIACAIAAAD7GkOtAAAACXBIWXMAAAsTAAALEwEAmpwYAAAHHElEQVR4nO3BMQEAAADCoPVPbQdvoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMBVrgABu0Xl6wAAAABJRU5ErkJggg==';
+const ALLOWED_IMAGE_MIME_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/jpg",
+]);
+const BLANK_WHITE_PAINT_DATA_URL =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAgAAAAIACAIAAAD7GkOtAAAACXBIWXMAAAsTAAALEwEAmpwYAAAHHElEQVR4nO3BMQEAAADCoPVPbQdvoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMBVrgABu0Xl6wAAAABJRU5ErkJggg==";
 
 const app = express();
 app.use(cors({ origin: CLIENT_ORIGINS }));
-app.use(express.json({ limit: '8mb' }));
+app.use(express.json({ limit: "8mb" }));
 
-app.get('/', (_req, res) => {
+app.get("/", (_req, res) => {
   res.json({
     ok: true,
-    service: 'BobArtist Server',
+    service: "BobArtist Server",
     version: VERSION,
-    rooms: rooms.size
+    rooms: rooms.size,
   });
 });
 
-app.get('/health', (_req, res) => {
+app.get("/health", (_req, res) => {
   res.json({ ok: true, version: VERSION });
 });
 
@@ -183,67 +217,89 @@ const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: {
     origin: CLIENT_ORIGINS,
-    methods: ['GET', 'POST']
+    methods: ["GET", "POST"],
   },
-  maxHttpBufferSize: 8 * 1024 * 1024
+  maxHttpBufferSize: 8 * 1024 * 1024,
 });
 
 const rooms = new Map<string, Room>();
 const images = new Map<string, ImageStoreItem>();
 
 function normalizeName(name?: string): string {
-  const value = (name || '').trim();
-  return value.length > 0 ? value.slice(0, 16) : '익명';
+  const value = (name || "").trim();
+  return value.length > 0 ? value.slice(0, 16) : "익명";
 }
 
 function normalizeRoomCode(roomCode?: string): string {
-  return (roomCode || '').trim().replace(/[^0-9]/g, '').slice(0, 6);
+  return (roomCode || "")
+    .trim()
+    .replace(/[^0-9]/g, "")
+    .slice(0, 6);
 }
 
 function generateRoomCode(): string {
   for (let tryCount = 0; tryCount < 100; tryCount += 1) {
-    const code = String(Math.floor(Math.random() * 1_000_000)).padStart(6, '0');
+    const code = String(Math.floor(Math.random() * 1_000_000)).padStart(6, "0");
     if (!rooms.has(code)) return code;
   }
-  throw new Error('방 코드 생성에 실패했습니다.');
+  throw new Error("방 코드 생성에 실패했습니다.");
 }
 
 function generateImageId(): string {
   return `img_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
-function parseArtwork(payload?: CreateRoomRequest['artwork']): Artwork {
+function normalizeGameSettings(value?: Partial<GameSettings>): GameSettings {
+  const decorateDurationMs = Number(value?.decorateDurationMs);
+  const findDurationMs = Number(value?.findDurationMs);
+  return {
+    decorateDurationMs: ALLOWED_DECORATE_DURATION_MS.has(decorateDurationMs)
+      ? decorateDurationMs
+      : DEFAULT_DECORATE_DURATION_MS,
+    findDurationMs: ALLOWED_FIND_DURATION_MS.has(findDurationMs)
+      ? findDurationMs
+      : DEFAULT_FIND_DURATION_MS,
+  };
+}
+
+function formatMinutes(ms: number): string {
+  return `${Math.round(ms / 60000)}분`;
+}
+
+function parseArtwork(payload?: CreateRoomRequest["artwork"]): Artwork {
   if (!payload?.dataUrl) {
-    throw new Error('방을 만들려면 원본 이미지가 필요합니다.');
+    throw new Error("방을 만들려면 원본 이미지가 필요합니다.");
   }
 
-  const mimeType = (payload.mimeType || '').toLowerCase();
+  const mimeType = (payload.mimeType || "").toLowerCase();
   if (!ALLOWED_IMAGE_MIME_TYPES.has(mimeType)) {
-    throw new Error('PNG, JPG, JPEG 이미지만 사용할 수 있습니다.');
+    throw new Error("PNG, JPG, JPEG 이미지만 사용할 수 있습니다.");
   }
 
-  const match = payload.dataUrl.match(/^data:(image\/(?:png|jpeg|jpg));base64,(.+)$/i);
+  const match = payload.dataUrl.match(
+    /^data:(image\/(?:png|jpeg|jpg));base64,(.+)$/i,
+  );
   if (!match) {
-    throw new Error('이미지 데이터 형식이 올바르지 않습니다.');
+    throw new Error("이미지 데이터 형식이 올바르지 않습니다.");
   }
 
-  const buffer = Buffer.from(match[2], 'base64');
+  const buffer = Buffer.from(match[2], "base64");
   if (buffer.length <= 0) {
-    throw new Error('이미지 파일을 읽을 수 없습니다.');
+    throw new Error("이미지 파일을 읽을 수 없습니다.");
   }
 
   if (buffer.length > MAX_IMAGE_BYTES) {
-    throw new Error('이미지는 최대 5MB까지만 사용할 수 있습니다.');
+    throw new Error("이미지는 최대 5MB까지만 사용할 수 있습니다.");
   }
 
   const imageId = generateImageId();
-  const fileName = (payload.fileName || 'artwork').slice(0, 120);
+  const fileName = (payload.fileName || "artwork").slice(0, 120);
   images.set(imageId, {
     buffer,
     mimeType,
     fileName,
     sizeBytes: buffer.length,
-    createdAt: Date.now()
+    createdAt: Date.now(),
   });
 
   return {
@@ -251,17 +307,19 @@ function parseArtwork(payload?: CreateRoomRequest['artwork']): Artwork {
     imageUrl: `/images/${imageId}`,
     fileName,
     mimeType,
-    sizeBytes: buffer.length
+    sizeBytes: buffer.length,
   };
 }
 
 function canStartGame(room: Room): boolean {
-  return room.state === 'lobby'
-    && room.players.length >= MIN_PLAYERS
-    && room.players.length <= MAX_PLAYERS
-    && room.players
+  return (
+    room.state === "lobby" &&
+    room.players.length >= MIN_PLAYERS &&
+    room.players.length <= MAX_PLAYERS &&
+    room.players
       .filter((player) => player.socketId !== room.hostSocketId)
-      .every((player) => player.ready);
+      .every((player) => player.ready)
+  );
 }
 
 function normalizeSpyIndex(room: Room): void {
@@ -269,7 +327,17 @@ function normalizeSpyIndex(room: Room): void {
     room.currentSpyIndex = 0;
     return;
   }
-  room.currentSpyIndex = ((room.currentSpyIndex % room.players.length) + room.players.length) % room.players.length;
+  room.currentSpyIndex =
+    ((room.currentSpyIndex % room.players.length) + room.players.length) %
+    room.players.length;
+}
+
+function setRandomSpy(room: Room): void {
+  if (room.players.length <= 0) {
+    room.currentSpyIndex = 0;
+    return;
+  }
+  room.currentSpyIndex = Math.floor(Math.random() * room.players.length);
 }
 
 function assignRoles(room: Room): void {
@@ -278,8 +346,8 @@ function assignRoles(room: Room): void {
     const isSpy = index === room.currentSpyIndex;
     return {
       ...player,
-      role: isSpy ? 'spy' : 'artist',
-      submitted: isSpy
+      role: isSpy ? "spy" : "artist",
+      submitted: isSpy,
     };
   });
   room.submissions = {};
@@ -304,15 +372,19 @@ function setGamePhase(room: Room, phase: GamePhase): void {
   room.game.phase = phase;
   room.game.phaseStartedAt = Date.now();
   room.updatedAt = Date.now();
-  if (phase !== 'find') {
+  if (phase !== "find") {
     room.focusPointer = null;
   } else {
     room.lastSpyFocusSnapshotAt = Date.now();
     emitArtistFocusScores(room);
     scheduleFindTimeout(room.code, room.game.round, room.game.phaseStartedAt);
   }
-  if (phase === 'decorate') {
-    scheduleDecorateTimeout(room.code, room.game.round, room.game.phaseStartedAt);
+  if (phase === "decorate") {
+    scheduleDecorateTimeout(
+      room.code,
+      room.game.round,
+      room.game.phaseStartedAt,
+    );
   }
   emitRoomState(room);
 }
@@ -320,8 +392,13 @@ function setGamePhase(room: Room, phase: GamePhase): void {
 function scheduleFindPhase(roomCode: string): void {
   setTimeout(() => {
     const latestRoom = rooms.get(roomCode);
-    if (!latestRoom || latestRoom.state !== 'playing' || latestRoom.game?.phase !== 'reveal') return;
-    setGamePhase(latestRoom, 'find');
+    if (
+      !latestRoom ||
+      latestRoom.state !== "playing" ||
+      latestRoom.game?.phase !== "reveal"
+    )
+      return;
+    setGamePhase(latestRoom, "find");
   }, REVEAL_TO_FIND_DELAY_MS);
 }
 
@@ -329,7 +406,7 @@ function ensureMissingRunnerSubmissions(room: Room): void {
   if (!room.game) return;
   const now = Date.now();
   room.players
-    .filter((player) => player.role === 'artist')
+    .filter((player) => player.role === "artist")
     .forEach((player, index) => {
       if (room.submissions[player.socketId]) return;
       const runnerIndex = index + 1;
@@ -337,75 +414,118 @@ function ensureMissingRunnerSubmissions(room: Room): void {
         playerId: player.socketId,
         playerName: player.name,
         character: {
-          xRatio: Math.min(0.86, 0.26 + (runnerIndex * 0.12)),
-          yRatio: Math.min(0.78, 0.30 + ((runnerIndex % 4) * 0.12)),
+          xRatio: Math.min(0.86, 0.26 + runnerIndex * 0.12),
+          yRatio: Math.min(0.78, 0.3 + (runnerIndex % 4) * 0.12),
           radiusRatio: 0.08,
-          baseColor: '#FFFFFF'
+          baseColor: "#FFFFFF",
         },
         paintDataUrl: BLANK_WHITE_PAINT_DATA_URL,
-        submittedAt: now
+        submittedAt: now,
       };
       player.submitted = true;
     });
 }
 
-function finishDecorateTimeout(roomCode: string, round: number, phaseStartedAt: number): void {
+function finishDecorateTimeout(
+  roomCode: string,
+  round: number,
+  phaseStartedAt: number,
+): void {
   const latestRoom = rooms.get(roomCode);
-  if (!latestRoom || latestRoom.state !== 'playing' || !latestRoom.game) return;
-  if (latestRoom.game.round !== round || latestRoom.game.phaseStartedAt !== phaseStartedAt) return;
-  if (latestRoom.game.phase !== 'decorate' && latestRoom.game.phase !== 'submit') return;
+  if (!latestRoom || latestRoom.state !== "playing" || !latestRoom.game) return;
+  if (
+    latestRoom.game.round !== round ||
+    latestRoom.game.phaseStartedAt !== phaseStartedAt
+  )
+    return;
+  if (
+    latestRoom.game.phase !== "decorate" &&
+    latestRoom.game.phase !== "submit"
+  )
+    return;
 
   ensureMissingRunnerSubmissions(latestRoom);
-  latestRoom.game.phase = 'reveal';
+  latestRoom.game.phase = "reveal";
   latestRoom.game.phaseStartedAt = Date.now();
   latestRoom.updatedAt = Date.now();
   emitRoomState(latestRoom);
   scheduleFindPhase(latestRoom.code);
 }
 
-function scheduleDecorateTimeout(roomCode: string, round: number, phaseStartedAt: number): void {
+function scheduleDecorateTimeout(
+  roomCode: string,
+  round: number,
+  phaseStartedAt: number,
+): void {
+  const initialRoom = rooms.get(roomCode);
+  const delayMs =
+    initialRoom?.settings.decorateDurationMs ?? DEFAULT_DECORATE_DURATION_MS;
   setTimeout(() => {
     const latestRoom = rooms.get(roomCode);
-    if (!latestRoom || latestRoom.state !== 'playing' || !latestRoom.game) return;
-    if (latestRoom.game.round !== round || latestRoom.game.phaseStartedAt !== phaseStartedAt) return;
-    if (latestRoom.game.phase !== 'decorate' && latestRoom.game.phase !== 'submit') return;
+    if (!latestRoom || latestRoom.state !== "playing" || !latestRoom.game)
+      return;
+    if (
+      latestRoom.game.round !== round ||
+      latestRoom.game.phaseStartedAt !== phaseStartedAt
+    )
+      return;
+    if (
+      latestRoom.game.phase !== "decorate" &&
+      latestRoom.game.phase !== "submit"
+    )
+      return;
 
     // 시간 종료 순간 서버가 바로 기본 흰 원을 생성하면,
     // 클라이언트가 가진 실제 위치/그림 스냅샷이 반영되지 않아 다음 단계에서 원이 엉뚱하게 보일 수 있습니다.
     // 먼저 모든 도망자 클라이언트에 자동 제출을 요청하고, 짧은 유예 뒤에도 누락된 인원만 서버 기본값으로 보정합니다.
-    if (latestRoom.game.phase === 'decorate') {
-      latestRoom.game.phase = 'submit';
+    if (latestRoom.game.phase === "decorate") {
+      latestRoom.game.phase = "submit";
       latestRoom.updatedAt = Date.now();
       emitRoomState(latestRoom);
     }
 
-    io.to(latestRoom.code).emit('auto_submit_required', {
+    io.to(latestRoom.code).emit("auto_submit_required", {
       round,
-      deadlineAt: Date.now() + AUTO_SUBMIT_GRACE_MS
+      deadlineAt: Date.now() + AUTO_SUBMIT_GRACE_MS,
     });
 
-    setTimeout(() => finishDecorateTimeout(roomCode, round, phaseStartedAt), AUTO_SUBMIT_GRACE_MS);
-  }, DECORATE_DURATION_MS);
+    setTimeout(
+      () => finishDecorateTimeout(roomCode, round, phaseStartedAt),
+      AUTO_SUBMIT_GRACE_MS,
+    );
+  }, delayMs);
 }
 
-function scheduleFindTimeout(roomCode: string, round: number, phaseStartedAt: number): void {
+function scheduleFindTimeout(
+  roomCode: string,
+  round: number,
+  phaseStartedAt: number,
+): void {
+  const initialRoom = rooms.get(roomCode);
+  const delayMs =
+    initialRoom?.settings.findDurationMs ?? DEFAULT_FIND_DURATION_MS;
   setTimeout(() => {
     const latestRoom = rooms.get(roomCode);
-    if (!latestRoom || latestRoom.state !== 'playing' || !latestRoom.game) return;
-    if (latestRoom.game.round !== round || latestRoom.game.phaseStartedAt !== phaseStartedAt) return;
-    if (latestRoom.game.phase !== 'find') return;
+    if (!latestRoom || latestRoom.state !== "playing" || !latestRoom.game)
+      return;
+    if (
+      latestRoom.game.round !== round ||
+      latestRoom.game.phaseStartedAt !== phaseStartedAt
+    )
+      return;
+    if (latestRoom.game.phase !== "find") return;
 
     latestRoom.selectedTargetId = null;
     latestRoom.result = {
       selectedTargetId: null,
       success: false,
-      message: '찾기 시간 5분 종료. 도망자 승리!'
+      message: `찾기 시간 ${formatMinutes(latestRoom.settings.findDurationMs)} 종료. 도망자 승리!`,
     };
-    latestRoom.game.phase = 'result';
+    latestRoom.game.phase = "result";
     latestRoom.game.phaseStartedAt = Date.now();
     latestRoom.updatedAt = Date.now();
     emitRoomState(latestRoom);
-  }, FIND_DURATION_MS);
+  }, delayMs);
 }
 
 function toPublicRoom(room: Room): PublicRoom {
@@ -421,9 +541,10 @@ function toPublicRoom(room: Room): PublicRoom {
       ready: player.ready,
       isHost: player.socketId === room.hostSocketId,
       role: player.role,
-      submitted: player.submitted
+      submitted: player.submitted,
     })),
     artwork: room.artwork,
+    settings: room.settings,
     game: room.game
       ? {
           round: room.game.round,
@@ -433,25 +554,26 @@ function toPublicRoom(room: Room): PublicRoom {
           artwork: room.game.artwork,
           submissions: Object.values(room.submissions).map((submission) => ({
             ...submission,
-            caught: room.caughtTargetIds.includes(submission.playerId)
+            caught: room.caughtTargetIds.includes(submission.playerId),
           })),
           caughtTargetIds: [...room.caughtTargetIds],
           selectedTargetId: room.selectedTargetId,
-          result: room.result
+          result: room.result,
         }
       : null,
     createdAt: room.createdAt,
-    updatedAt: room.updatedAt
+    updatedAt: room.updatedAt,
   };
 }
 
 function emitRoomState(room: Room): void {
-  io.to(room.code).emit('room_state', toPublicRoom(room));
+  io.to(room.code).emit("room_state", toPublicRoom(room));
 }
 
 function findJoinedRoom(socket: Socket): Room | null {
   for (const room of rooms.values()) {
-    if (room.players.some((player) => player.socketId === socket.id)) return room;
+    if (room.players.some((player) => player.socketId === socket.id))
+      return room;
   }
   return null;
 }
@@ -464,7 +586,9 @@ function deleteRoomAndImage(code: string, room: Room): void {
 function leaveJoinedRooms(socket: Socket): void {
   for (const [code, room] of rooms.entries()) {
     const beforeCount = room.players.length;
-    room.players = room.players.filter((player) => player.socketId !== socket.id);
+    room.players = room.players.filter(
+      (player) => player.socketId !== socket.id,
+    );
 
     if (beforeCount === room.players.length) continue;
 
@@ -481,8 +605,8 @@ function leaveJoinedRooms(socket: Socket): void {
 
     normalizeSpyIndex(room);
 
-    if (room.state !== 'lobby') {
-      room.state = 'lobby';
+    if (room.state !== "lobby") {
+      room.state = "lobby";
       room.game = null;
       room.submissions = {};
       room.caughtTargetIds = [];
@@ -493,7 +617,12 @@ function leaveJoinedRooms(socket: Socket): void {
       room.lastSpyFocusSnapshotAt = 0;
     }
 
-    room.players = room.players.map((player) => ({ ...player, ready: false, role: null, submitted: false }));
+    room.players = room.players.map((player) => ({
+      ...player,
+      ready: false,
+      role: null,
+      submitted: false,
+    }));
     room.updatedAt = Date.now();
     emitRoomState(room);
   }
@@ -504,31 +633,37 @@ function joinRoom(socket: Socket, payload: ClientRoomRequest): void {
   const playerName = normalizeName(payload.playerName);
 
   if (roomCode.length !== 6) {
-    socket.emit('room_error', { message: '6자리 방 코드를 입력해 주세요.' });
+    socket.emit("room_error", { message: "6자리 방 코드를 입력해 주세요." });
     return;
   }
 
   const room = rooms.get(roomCode);
   if (!room) {
-    socket.emit('room_error', { message: '존재하지 않는 방입니다.' });
+    socket.emit("room_error", { message: "존재하지 않는 방입니다." });
     return;
   }
 
-  if (room.state !== 'lobby') {
-    socket.emit('room_error', { message: '이미 게임이 시작된 방입니다.' });
+  if (room.state !== "lobby") {
+    socket.emit("room_error", { message: "이미 게임이 시작된 방입니다." });
     return;
   }
 
-  const alreadyJoined = room.players.some((player) => player.socketId === socket.id);
+  const alreadyJoined = room.players.some(
+    (player) => player.socketId === socket.id,
+  );
   if (!alreadyJoined && room.players.length >= MAX_PLAYERS) {
-    socket.emit('room_error', { message: '방이 가득 찼습니다. 최대 8명까지 입장할 수 있습니다.' });
+    socket.emit("room_error", {
+      message: "방이 가득 찼습니다. 최대 8명까지 입장할 수 있습니다.",
+    });
     return;
   }
 
   leaveJoinedRooms(socket);
   socket.join(room.code);
 
-  const currentPlayer = room.players.find((player) => player.socketId === socket.id);
+  const currentPlayer = room.players.find(
+    (player) => player.socketId === socket.id,
+  );
   if (currentPlayer) {
     currentPlayer.name = playerName;
   } else {
@@ -538,24 +673,26 @@ function joinRoom(socket: Socket, payload: ClientRoomRequest): void {
       ready: false,
       role: null,
       submitted: false,
-      joinedAt: Date.now()
+      joinedAt: Date.now(),
     });
   }
 
   room.updatedAt = Date.now();
-  socket.emit('room_joined', toPublicRoom(room));
+  socket.emit("room_joined", toPublicRoom(room));
   emitRoomState(room);
 }
 
 function toggleReady(socket: Socket): void {
   const room = findJoinedRoom(socket);
   if (!room) {
-    socket.emit('room_error', { message: '먼저 방에 입장해 주세요.' });
+    socket.emit("room_error", { message: "먼저 방에 입장해 주세요." });
     return;
   }
 
-  if (room.state !== 'lobby') {
-    socket.emit('room_error', { message: '게임 시작 후에는 준비 상태를 바꿀 수 없습니다.' });
+  if (room.state !== "lobby") {
+    socket.emit("room_error", {
+      message: "게임 시작 후에는 준비 상태를 바꿀 수 없습니다.",
+    });
     return;
   }
 
@@ -564,7 +701,9 @@ function toggleReady(socket: Socket): void {
 
   if (player.socketId === room.hostSocketId) {
     player.ready = true;
-    socket.emit('room_error', { message: '방장은 술래 역할이므로 준비 버튼 없이 시작 조건을 관리합니다.' });
+    socket.emit("room_error", {
+      message: "방장은 술래 역할이므로 준비 버튼 없이 시작 조건을 관리합니다.",
+    });
     emitRoomState(room);
     return;
   }
@@ -577,77 +716,102 @@ function toggleReady(socket: Socket): void {
 function startGame(socket: Socket): void {
   const room = findJoinedRoom(socket);
   if (!room) {
-    socket.emit('room_error', { message: '먼저 방에 입장해 주세요.' });
+    socket.emit("room_error", { message: "먼저 방에 입장해 주세요." });
     return;
   }
 
   if (room.hostSocketId !== socket.id) {
-    socket.emit('room_error', { message: '방장만 게임을 시작할 수 있습니다.' });
+    socket.emit("room_error", { message: "방장만 게임을 시작할 수 있습니다." });
     return;
   }
 
   if (!canStartGame(room)) {
-    socket.emit('room_error', { message: '최소 2명 이상 필요하며, 모든 도망자가 READY 상태여야 게임을 시작할 수 있습니다.' });
+    socket.emit("room_error", {
+      message:
+        "최소 2명 이상 필요하며, 모든 도망자가 READY 상태여야 게임을 시작할 수 있습니다.",
+    });
     return;
   }
 
   const now = Date.now();
+  setRandomSpy(room);
   assignRoles(room);
-  room.state = 'playing';
+  room.state = "playing";
   room.game = {
     round: 1,
-    phase: 'role_assignment',
+    phase: "role_assignment",
     artwork: room.artwork,
     startedAt: now,
-    phaseStartedAt: now
+    phaseStartedAt: now,
   };
   room.updatedAt = now;
 
   emitRoomState(room);
-  io.to(room.code).emit('game_started', toPublicRoom(room));
+  io.to(room.code).emit("game_started", toPublicRoom(room));
 
   setTimeout(() => {
     const latestRoom = rooms.get(room.code);
-    if (!latestRoom || latestRoom.state !== 'playing' || latestRoom.game?.phase !== 'role_assignment') return;
-    setGamePhase(latestRoom, 'decorate');
+    if (
+      !latestRoom ||
+      latestRoom.state !== "playing" ||
+      latestRoom.game?.phase !== "role_assignment"
+    )
+      return;
+    setGamePhase(latestRoom, "decorate");
   }, ROLE_ASSIGN_DELAY_MS);
 }
 
 function normalizeSnapshot(value: unknown): CharacterSnapshot | null {
-  if (!value || typeof value !== 'object') return null;
+  if (!value || typeof value !== "object") return null;
   const item = value as Partial<CharacterSnapshot>;
   const xRatio = Number(item.xRatio);
   const yRatio = Number(item.yRatio);
   const radiusRatio = Number(item.radiusRatio);
-  if (!Number.isFinite(xRatio) || !Number.isFinite(yRatio) || !Number.isFinite(radiusRatio)) return null;
+  if (
+    !Number.isFinite(xRatio) ||
+    !Number.isFinite(yRatio) ||
+    !Number.isFinite(radiusRatio)
+  )
+    return null;
   return {
     xRatio: Math.min(1, Math.max(0, xRatio)),
     yRatio: Math.min(1, Math.max(0, yRatio)),
     radiusRatio: Math.min(0.35, Math.max(0.01, radiusRatio)),
-    baseColor: typeof item.baseColor === 'string' ? item.baseColor.slice(0, 32) : '#FFFFFF'
+    baseColor:
+      typeof item.baseColor === "string"
+        ? item.baseColor.slice(0, 32)
+        : "#FFFFFF",
   };
 }
 
-function submitArtwork(socket: Socket, payload: { character?: unknown; paintDataUrl?: string } = {}): void {
+function submitArtwork(
+  socket: Socket,
+  payload: { character?: unknown; paintDataUrl?: string } = {},
+): void {
   const room = findJoinedRoom(socket);
-  if (!room || room.state !== 'playing' || !room.game) {
-    socket.emit('room_error', { message: '진행 중인 게임이 없습니다.' });
+  if (!room || room.state !== "playing" || !room.game) {
+    socket.emit("room_error", { message: "진행 중인 게임이 없습니다." });
     return;
   }
 
-  if (room.game.phase !== 'decorate' && room.game.phase !== 'submit') {
-    socket.emit('room_error', { message: '현재 단계에서는 제출할 수 없습니다.' });
+  if (room.game.phase !== "decorate" && room.game.phase !== "submit") {
+    socket.emit("room_error", {
+      message: "현재 단계에서는 제출할 수 없습니다.",
+    });
     return;
   }
 
   const player = room.players.find((item) => item.socketId === socket.id);
   if (!player) return;
 
-  if (player.role === 'artist') {
+  if (player.role === "artist") {
     const character = normalizeSnapshot(payload.character);
-    const paintDataUrl = typeof payload.paintDataUrl === 'string' ? payload.paintDataUrl : '';
-    if (!character || !paintDataUrl.startsWith('data:image/png;base64,')) {
-      socket.emit('room_error', { message: '아티스트 제출 데이터가 올바르지 않습니다.' });
+    const paintDataUrl =
+      typeof payload.paintDataUrl === "string" ? payload.paintDataUrl : "";
+    if (!character || !paintDataUrl.startsWith("data:image/png;base64,")) {
+      socket.emit("room_error", {
+        message: "아티스트 제출 데이터가 올바르지 않습니다.",
+      });
       return;
     }
     room.submissions[player.socketId] = {
@@ -655,18 +819,18 @@ function submitArtwork(socket: Socket, payload: { character?: unknown; paintData
       playerName: player.name,
       character,
       paintDataUrl,
-      submittedAt: Date.now()
+      submittedAt: Date.now(),
     };
   }
 
   player.submitted = true;
-  if (room.game.phase === 'decorate') {
+  if (room.game.phase === "decorate") {
     // Keep phaseStartedAt from DECORATE so submitting early does not extend the 1-minute drawing timer.
-    room.game.phase = 'submit';
+    room.game.phase = "submit";
   }
 
   if (room.players.every((item) => item.submitted)) {
-    room.game.phase = 'reveal';
+    room.game.phase = "reveal";
     room.game.phaseStartedAt = Date.now();
     scheduleFindPhase(room.code);
   }
@@ -675,10 +839,9 @@ function submitArtwork(socket: Socket, payload: { character?: unknown; paintData
   emitRoomState(room);
 }
 
-
 function getRunnerIds(room: Room): string[] {
   return room.players
-    .filter((player) => player.role === 'artist')
+    .filter((player) => player.role === "artist")
     .map((player) => player.socketId);
 }
 
@@ -689,39 +852,49 @@ function getCaughtRunnerCount(room: Room): number {
 
 function areAllRunnersCaught(room: Room): boolean {
   const runnerIds = getRunnerIds(room);
-  return runnerIds.length > 0 && runnerIds.every((id) => room.caughtTargetIds.includes(id));
+  return (
+    runnerIds.length > 0 &&
+    runnerIds.every((id) => room.caughtTargetIds.includes(id))
+  );
 }
 
 function findTarget(socket: Socket, payload: { targetId?: string } = {}): void {
   const room = findJoinedRoom(socket);
-  if (!room || room.state !== 'playing' || !room.game) {
-    socket.emit('room_error', { message: '진행 중인 게임이 없습니다.' });
+  if (!room || room.state !== "playing" || !room.game) {
+    socket.emit("room_error", { message: "진행 중인 게임이 없습니다." });
     return;
   }
   const player = room.players.find((item) => item.socketId === socket.id);
-  if (!player || player.role !== 'spy') {
-    socket.emit('room_error', { message: '술래만 원을 선택할 수 있습니다.' });
+  if (!player || player.role !== "spy") {
+    socket.emit("room_error", { message: "술래만 원을 선택할 수 있습니다." });
     return;
   }
-  if (room.game.phase !== 'find') {
-    socket.emit('room_error', { message: '현재 단계에서는 찾기를 할 수 없습니다.' });
+  if (room.game.phase !== "find") {
+    socket.emit("room_error", {
+      message: "현재 단계에서는 찾기를 할 수 없습니다.",
+    });
     return;
   }
-  const targetId = typeof payload.targetId === 'string' && room.submissions[payload.targetId]
-    ? payload.targetId
-    : null;
+  const targetId =
+    typeof payload.targetId === "string" && room.submissions[payload.targetId]
+      ? payload.targetId
+      : null;
   if (!targetId) {
-    socket.emit('room_error', { message: '선택할 수 있는 원을 클릭해 주세요.' });
+    socket.emit("room_error", {
+      message: "선택할 수 있는 원을 클릭해 주세요.",
+    });
     return;
   }
   if (room.caughtTargetIds.includes(targetId)) {
-    socket.emit('room_error', { message: '이미 잡힌 도망자입니다. 다른 원을 찾아주세요.' });
+    socket.emit("room_error", {
+      message: "이미 잡힌 도망자입니다. 다른 원을 찾아주세요.",
+    });
     return;
   }
 
   const target = room.players.find((item) => item.socketId === targetId);
-  if (!target || target.role !== 'artist') {
-    socket.emit('room_error', { message: '도망자 원만 잡을 수 있습니다.' });
+  if (!target || target.role !== "artist") {
+    socket.emit("room_error", { message: "도망자 원만 잡을 수 있습니다." });
     return;
   }
 
@@ -732,9 +905,9 @@ function findTarget(socket: Socket, payload: { targetId?: string } = {}): void {
     room.result = {
       selectedTargetId: targetId,
       success: true,
-      message: `도망자 ${getCaughtRunnerCount(room)}명을 모두 잡았습니다. 술래 승리!`
+      message: `도망자 ${getCaughtRunnerCount(room)}명을 모두 잡았습니다. 술래 승리!`,
     };
-    room.game.phase = 'result';
+    room.game.phase = "result";
     room.game.phaseStartedAt = Date.now();
   } else {
     room.result = null;
@@ -746,32 +919,63 @@ function findTarget(socket: Socket, payload: { targetId?: string } = {}): void {
 
 function confirmFind(socket: Socket): void {
   const room = findJoinedRoom(socket);
-  if (!room || room.state !== 'playing' || !room.game) {
-    socket.emit('room_error', { message: '진행 중인 게임이 없습니다.' });
+  if (!room || room.state !== "playing" || !room.game) {
+    socket.emit("room_error", { message: "진행 중인 게임이 없습니다." });
     return;
   }
   const player = room.players.find((item) => item.socketId === socket.id);
-  if (!player || player.role !== 'spy') {
-    socket.emit('room_error', { message: '술래만 결과를 확정할 수 있습니다.' });
+  if (!player || player.role !== "spy") {
+    socket.emit("room_error", { message: "술래만 결과를 확정할 수 있습니다." });
     return;
   }
-  socket.emit('room_error', { message: '이제 원을 클릭하면 즉시 잡힘 처리됩니다. 모든 도망자를 잡으면 게임이 종료됩니다.' });
+  socket.emit("room_error", {
+    message:
+      "이제 원을 클릭하면 즉시 잡힘 처리됩니다. 모든 도망자를 잡으면 게임이 종료됩니다.",
+  });
+}
+
+function updateGameSettings(
+  socket: Socket,
+  payload: Partial<GameSettings> = {},
+): void {
+  const room = findJoinedRoom(socket);
+  if (!room) {
+    socket.emit("room_error", { message: "먼저 방에 입장해 주세요." });
+    return;
+  }
+  if (room.hostSocketId !== socket.id) {
+    socket.emit("room_error", {
+      message: "방장만 게임 시간을 변경할 수 있습니다.",
+    });
+    return;
+  }
+  if (room.state !== "lobby") {
+    socket.emit("room_error", {
+      message: "게임 시간은 로비에서만 변경할 수 있습니다.",
+    });
+    return;
+  }
+  room.settings = normalizeGameSettings(payload);
+  room.updatedAt = Date.now();
+  emitRoomState(room);
 }
 
 function restartGame(socket: Socket): void {
   const room = findJoinedRoom(socket);
   if (!room || !room.game) {
-    socket.emit('room_error', { message: '다시 시작할 게임이 없습니다.' });
+    socket.emit("room_error", { message: "다시 시작할 게임이 없습니다." });
     return;
   }
 
   if (room.hostSocketId !== socket.id) {
-    socket.emit('room_error', { message: '방장만 다시 시작할 수 있습니다.' });
+    socket.emit("room_error", { message: "방장만 다시 시작할 수 있습니다." });
     return;
   }
 
-  if (room.game.phase !== 'result') {
-    socket.emit('room_error', { message: 'RESULT 단계에서만 다시 시작할 수 있습니다.' });
+  if (room.game.phase !== "result") {
+    socket.emit("room_error", {
+      message: "RESULT 단계에서만 다시 시작할 수 있습니다.",
+    });
     return;
   }
 
@@ -779,40 +983,59 @@ function restartGame(socket: Socket): void {
   const nextRound = room.game.round + 1;
   rotateSpy(room);
   assignRoles(room);
-  room.state = 'playing';
+  room.state = "playing";
   room.game = {
     round: nextRound,
-    phase: 'role_assignment',
+    phase: "role_assignment",
     artwork: room.artwork,
     startedAt: now,
-    phaseStartedAt: now
+    phaseStartedAt: now,
   };
   room.updatedAt = now;
 
   emitRoomState(room);
-  io.to(room.code).emit('game_restarted', toPublicRoom(room));
+  io.to(room.code).emit("game_restarted", toPublicRoom(room));
 
   setTimeout(() => {
     const latestRoom = rooms.get(room.code);
-    if (!latestRoom || latestRoom.state !== 'playing' || latestRoom.game?.round !== nextRound || latestRoom.game.phase !== 'role_assignment') return;
-    setGamePhase(latestRoom, 'decorate');
+    if (
+      !latestRoom ||
+      latestRoom.state !== "playing" ||
+      latestRoom.game?.round !== nextRound ||
+      latestRoom.game.phase !== "role_assignment"
+    )
+      return;
+    setGamePhase(latestRoom, "decorate");
   }, ROLE_ASSIGN_DELAY_MS);
 }
 
-
-function updateFocusPointer(socket: Socket, payload: { xRatio?: number; yRatio?: number; canvasWidth?: number; canvasHeight?: number } = {}): void {
+function updateFocusPointer(
+  socket: Socket,
+  payload: {
+    xRatio?: number;
+    yRatio?: number;
+    canvasWidth?: number;
+    canvasHeight?: number;
+  } = {},
+): void {
   const room = findJoinedRoom(socket);
-  if (!room || room.state !== 'playing' || room.game?.phase !== 'find') return;
+  if (!room || room.state !== "playing" || room.game?.phase !== "find") return;
 
   const player = room.players.find((item) => item.socketId === socket.id);
-  if (!player || player.role !== 'spy') return;
+  if (!player || player.role !== "spy") return;
 
   const xRatio = Number(payload.xRatio);
   const yRatio = Number(payload.yRatio);
   const canvasWidth = Number(payload.canvasWidth);
   const canvasHeight = Number(payload.canvasHeight);
 
-  if (!Number.isFinite(xRatio) || !Number.isFinite(yRatio) || !Number.isFinite(canvasWidth) || !Number.isFinite(canvasHeight)) return;
+  if (
+    !Number.isFinite(xRatio) ||
+    !Number.isFinite(yRatio) ||
+    !Number.isFinite(canvasWidth) ||
+    !Number.isFinite(canvasHeight)
+  )
+    return;
   if (canvasWidth <= 0 || canvasHeight <= 0) return;
 
   room.focusPointer = {
@@ -820,72 +1043,93 @@ function updateFocusPointer(socket: Socket, payload: { xRatio?: number; yRatio?:
     yRatio: Math.min(1, Math.max(0, yRatio)),
     canvasWidth: Math.min(5000, Math.max(1, canvasWidth)),
     canvasHeight: Math.min(5000, Math.max(1, canvasHeight)),
-    updatedAt: Date.now()
+    updatedAt: Date.now(),
   };
 }
 
 function getFocusScoreItems(room: Room): FocusScoreItem[] {
-  return Object.values(room.submissions).map((submission) => ({
-    playerId: submission.playerId,
-    playerName: submission.playerName,
-    score: Math.round((room.focusScores[submission.playerId] || 0) * 10) / 10
-  })).sort((a, b) => b.score - a.score);
+  return Object.values(room.submissions)
+    .map((submission) => ({
+      playerId: submission.playerId,
+      playerName: submission.playerName,
+      score: Math.round((room.focusScores[submission.playerId] || 0) * 10) / 10,
+    }))
+    .sort((a, b) => b.score - a.score);
 }
 
 function emitArtistFocusScores(room: Room): void {
   const scores = getFocusScoreItems(room);
   room.players
-    .filter((player) => player.role === 'artist')
+    .filter((player) => player.role === "artist")
     .forEach((artist) => {
-      const ownScore = scores.find((item) => item.playerId === artist.socketId) || {
+      const ownScore = scores.find(
+        (item) => item.playerId === artist.socketId,
+      ) || {
         playerId: artist.socketId,
         playerName: artist.name,
-        score: 0
+        score: 0,
       };
-      io.to(artist.socketId).emit('focus_scores', {
-        audience: 'artist_live',
+      io.to(artist.socketId).emit("focus_scores", {
+        audience: "artist_live",
         round: room.game?.round || 0,
-        phase: room.game?.phase || 'loading',
+        phase: room.game?.phase || "loading",
         radiusPx: FOCUS_RADIUS_PX,
-        scores: [ownScore]
+        scores: [ownScore],
       });
     });
 }
 
 function emitSpyFocusSnapshot(room: Room): void {
-  const spy = room.players.find((player) => player.role === 'spy');
+  const spy = room.players.find((player) => player.role === "spy");
   if (!spy) return;
-  io.to(spy.socketId).emit('focus_scores', {
-    audience: 'spy_snapshot',
+  io.to(spy.socketId).emit("focus_scores", {
+    audience: "spy_snapshot",
     round: room.game?.round || 0,
-    phase: room.game?.phase || 'loading',
+    phase: room.game?.phase || "loading",
     radiusPx: FOCUS_RADIUS_PX,
-    scores: getFocusScoreItems(room)
+    scores: getFocusScoreItems(room),
   });
 }
 
 function tickFocusScores(): void {
   const now = Date.now();
   for (const room of rooms.values()) {
-    if (room.state !== 'playing' || room.game?.phase !== 'find' || !room.focusPointer) continue;
+    if (
+      room.state !== "playing" ||
+      room.game?.phase !== "find" ||
+      !room.focusPointer
+    )
+      continue;
     if (now - room.focusPointer.updatedAt > 30000) continue;
 
     const pointerX = room.focusPointer.xRatio * room.focusPointer.canvasWidth;
     const pointerY = room.focusPointer.yRatio * room.focusPointer.canvasHeight;
-    const minSize = Math.min(room.focusPointer.canvasWidth, room.focusPointer.canvasHeight);
+    const minSize = Math.min(
+      room.focusPointer.canvasWidth,
+      room.focusPointer.canvasHeight,
+    );
 
     Object.values(room.submissions).forEach((submission) => {
-      const targetX = submission.character.xRatio * room.focusPointer!.canvasWidth;
-      const targetY = submission.character.yRatio * room.focusPointer!.canvasHeight;
+      const targetX =
+        submission.character.xRatio * room.focusPointer!.canvasWidth;
+      const targetY =
+        submission.character.yRatio * room.focusPointer!.canvasHeight;
       const targetRadius = submission.character.radiusRatio * minSize;
       const dx = pointerX - targetX;
       const dy = pointerY - targetY;
-      const distanceToCircle = Math.max(0, Math.sqrt(dx * dx + dy * dy) - targetRadius);
+      const distanceToCircle = Math.max(
+        0,
+        Math.sqrt(dx * dx + dy * dy) - targetRadius,
+      );
       if (distanceToCircle > FOCUS_RADIUS_PX) return;
 
-      const closeness = 1 - (distanceToCircle / FOCUS_RADIUS_PX);
-      const addScore = Math.max(1, Math.ceil(closeness * FOCUS_MAX_SCORE_PER_TICK));
-      room.focusScores[submission.playerId] = (room.focusScores[submission.playerId] || 0) + addScore;
+      const closeness = 1 - distanceToCircle / FOCUS_RADIUS_PX;
+      const addScore = Math.max(
+        1,
+        Math.ceil(closeness * FOCUS_MAX_SCORE_PER_TICK),
+      );
+      room.focusScores[submission.playerId] =
+        (room.focusScores[submission.playerId] || 0) + addScore;
     });
 
     emitArtistFocusScores(room);
@@ -900,48 +1144,55 @@ setInterval(tickFocusScores, FOCUS_SCORE_TICK_MS);
 
 function forceNextPhase(socket: Socket): void {
   const room = findJoinedRoom(socket);
-  if (!room || room.state !== 'playing' || !room.game) {
-    socket.emit('room_error', { message: '진행 중인 게임이 없습니다.' });
+  if (!room || room.state !== "playing" || !room.game) {
+    socket.emit("room_error", { message: "진행 중인 게임이 없습니다." });
     return;
   }
   if (room.hostSocketId !== socket.id) {
-    socket.emit('room_error', { message: '방장만 단계를 넘길 수 있습니다.' });
+    socket.emit("room_error", { message: "방장만 단계를 넘길 수 있습니다." });
     return;
   }
 
-  const flow: GamePhase[] = ['role_assignment', 'decorate', 'submit', 'reveal', 'find', 'result'];
+  const flow: GamePhase[] = [
+    "role_assignment",
+    "decorate",
+    "submit",
+    "reveal",
+    "find",
+    "result",
+  ];
   const index = flow.indexOf(room.game.phase);
   const next = flow[Math.min(flow.length - 1, index + 1)];
   setGamePhase(room, next);
 }
 
-app.get('/health', (_req, res) => {
+app.get("/health", (_req, res) => {
   res.json({
     ok: true,
-    service: 'bobartist-server',
+    service: "bobartist-server",
     version: VERSION,
     rooms: rooms.size,
     images: images.size,
-    storage: 'memory-only'
+    storage: "memory-only",
   });
 });
 
-app.get('/images/:imageId', (req, res) => {
+app.get("/images/:imageId", (req, res) => {
   const image = images.get(req.params.imageId);
   if (!image) {
-    res.status(404).send('Image not found');
+    res.status(404).send("Image not found");
     return;
   }
 
-  res.setHeader('Content-Type', image.mimeType);
-  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader("Content-Type", image.mimeType);
+  res.setHeader("Cache-Control", "no-store");
   res.send(image.buffer);
 });
 
-io.on('connection', (socket) => {
-  socket.emit('server_ready', { socketId: socket.id, version: VERSION });
+io.on("connection", (socket) => {
+  socket.emit("server_ready", { socketId: socket.id, version: VERSION });
 
-  socket.on('create_room', (payload: CreateRoomRequest = {}) => {
+  socket.on("create_room", (payload: CreateRoomRequest = {}) => {
     try {
       leaveJoinedRooms(socket);
 
@@ -951,8 +1202,9 @@ io.on('connection', (socket) => {
       const room: Room = {
         code,
         hostSocketId: socket.id,
-        state: 'lobby',
+        state: "lobby",
         artwork,
+        settings: normalizeGameSettings(payload.settings),
         game: null,
         submissions: {},
         caughtTargetIds: [],
@@ -962,44 +1214,58 @@ io.on('connection', (socket) => {
         focusPointer: null,
         lastSpyFocusSnapshotAt: 0,
         currentSpyIndex: 0,
-        players: [{
-          socketId: socket.id,
-          name: normalizeName(payload.playerName),
-          ready: true,
-          role: null,
-          submitted: false,
-          joinedAt: now
-        }],
+        players: [
+          {
+            socketId: socket.id,
+            name: normalizeName(payload.playerName),
+            ready: true,
+            role: null,
+            submitted: false,
+            joinedAt: now,
+          },
+        ],
         createdAt: now,
-        updatedAt: now
+        updatedAt: now,
       };
 
       rooms.set(code, room);
       socket.join(code);
-      socket.emit('room_created', toPublicRoom(room));
+      socket.emit("room_created", toPublicRoom(room));
       emitRoomState(room);
     } catch (error) {
-      const message = error instanceof Error ? error.message : '방 생성 중 오류가 발생했습니다.';
-      socket.emit('room_error', { message });
+      const message =
+        error instanceof Error
+          ? error.message
+          : "방 생성 중 오류가 발생했습니다.";
+      socket.emit("room_error", { message });
     }
   });
 
-  socket.on('join_room', (payload: ClientRoomRequest = {}) => joinRoom(socket, payload));
-  socket.on('leave_room', () => {
+  socket.on("join_room", (payload: ClientRoomRequest = {}) =>
+    joinRoom(socket, payload),
+  );
+  socket.on("leave_room", () => {
     leaveJoinedRooms(socket);
-    socket.emit('room_left');
+    socket.emit("room_left");
   });
-  socket.on('toggle_ready', () => toggleReady(socket));
-  socket.on('start_game', () => startGame(socket));
-  socket.on('submit_artwork', (payload = {}) => submitArtwork(socket, payload));
-  socket.on('find_target', (payload = {}) => findTarget(socket, payload));
-  socket.on('confirm_find', () => confirmFind(socket));
-  socket.on('focus_pointer', (payload = {}) => updateFocusPointer(socket, payload));
-  socket.on('restart_game', () => restartGame(socket));
-  socket.on('force_next_phase', () => forceNextPhase(socket));
-  socket.on('disconnect', () => leaveJoinedRooms(socket));
+  socket.on("toggle_ready", () => toggleReady(socket));
+  socket.on("update_game_settings", (payload = {}) =>
+    updateGameSettings(socket, payload),
+  );
+  socket.on("start_game", () => startGame(socket));
+  socket.on("submit_artwork", (payload = {}) => submitArtwork(socket, payload));
+  socket.on("find_target", (payload = {}) => findTarget(socket, payload));
+  socket.on("confirm_find", () => confirmFind(socket));
+  socket.on("focus_pointer", (payload = {}) =>
+    updateFocusPointer(socket, payload),
+  );
+  socket.on("restart_game", () => restartGame(socket));
+  socket.on("force_next_phase", () => forceNextPhase(socket));
+  socket.on("disconnect", () => leaveJoinedRooms(socket));
 });
 
 httpServer.listen(PORT, () => {
-  console.log(`[BobArtist] server v${VERSION} running on http://localhost:${PORT}`);
+  console.log(
+    `[BobArtist] server v${VERSION} running on http://localhost:${PORT}`,
+  );
 });
