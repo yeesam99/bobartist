@@ -1,6 +1,6 @@
 {
-  "name": "bobartist-server",
-  "version": "0.0.50",
+  "name": "bobplatform-server",
+  "version": "0.0.52",
   "private": true,
   "main": "src/index.ts",
   "scripts": {
@@ -9,6 +9,7 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
+    "bobplatform": "file:..",
     "cors": "^2.8.6",
     "express": "^5.2.1",
     "socket.io": "^4.8.3"

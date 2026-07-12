@@ -2,8 +2,9 @@ import express from "express";
 import cors from "cors";
 import { createServer } from "http";
 import { Server, Socket } from "socket.io";
+import { registerYachtDice } from "./games/yacht-dice";
 
-// BobArtist v0.0.50
+// BobPlatform v0.0.52 / BobArtist legacy module
 // DB 사용 없음: 방 상태와 업로드 이미지는 서버 메모리에만 저장합니다.
 
 type RoomState = "lobby" | "playing" | "ended";
@@ -174,7 +175,7 @@ type PublicRoom = {
   updatedAt: number;
 };
 
-const VERSION = "0.0.50";
+const VERSION = "0.0.52";
 const DEFAULT_DECORATE_DURATION_MS = 60 * 1000;
 const DEFAULT_FIND_DURATION_MS = 5 * 60 * 1000;
 const ALLOWED_DECORATE_DURATION_MS = new Set([
@@ -222,7 +223,7 @@ app.use(express.json({ limit: "8mb" }));
 app.get("/", (_req, res) => {
   res.json({
     ok: true,
-    service: "BobArtist Server",
+    service: "BobPlatform Server",
     version: VERSION,
     rooms: rooms.size,
   });
@@ -1292,6 +1293,8 @@ app.get("/images/:imageId", (req, res) => {
   res.send(image.buffer);
 });
 
+registerYachtDice(io);
+
 io.on("connection", (socket) => {
   socket.emit("server_ready", { socketId: socket.id, version: VERSION });
 
@@ -1371,6 +1374,6 @@ io.on("connection", (socket) => {
 
 httpServer.listen(PORT, () => {
   console.log(
-    `[BobArtist] server v${VERSION} running on http://localhost:${PORT}`,
+    `[BobPlatform] server v${VERSION} running on http://localhost:${PORT}`,
   );
 });

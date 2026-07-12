@@ -1,8 +1,8 @@
 {
-  "name": "bobartist",
-  "version": "0.0.50",
+  "name": "bobplatform",
+  "version": "0.0.52",
   "private": true,
-  "description": "BobArtist real-time hide-and-find drawing game",
+  "description": "BobPlatform multi-game web platform",
   "engines": {
     "node": ">=22"
   },

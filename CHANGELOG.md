@@ -1,3 +1,14 @@
+# BobPlatform v0.0.52 Platform Lobby Foundation
+
+- 프로젝트 이름과 버전을 BobPlatform v0.0.52로 전환했습니다.
+- 첫 화면에 BobArtist와 Yacht Dice를 선택할 수 있는 플랫폼 로비를 추가했습니다.
+- 기존 BobArtist 클라이언트 코드를 `client/src/games/bobartist/index.ts`로 이동하고 내부 게임 로직은 유지했습니다.
+- BobArtist 서버 로직과 기존 Socket 이벤트는 `server/src/index.ts`에 그대로 유지해 회귀 위험을 최소화했습니다.
+- Yacht Dice는 독립 모듈 폴더와 준비 화면까지만 추가했으며 게임 로직과 Socket 이벤트는 추가하지 않았습니다.
+- Hash 기반 경로를 사용해 Vercel 새로고침 시 SPA 경로 오류 가능성을 줄였습니다.
+- 루트/Client/Server package 버전과 브라우저 title, 화면 버전을 0.0.52로 동기화했습니다.
+- package-lock의 내부 전용 npm registry 주소를 공식 npm registry로 정리했습니다.
+
 # v0.0.50 Hide Ranking System
 
 - RESULT 화면에 도망자 기준 은신 순위 1등/2등/3등을 표시하도록 추가했습니다.
@@ -80,3 +91,11 @@
 
 ## 확인
 - `npm run build --prefix client` 성공
+
+## v0.0.52
+- Yacht Dice 전용 멀티플레이 로비 추가
+- BobArtist 로비의 닉네임/방 생성/방 코드 입장/플레이어/Ready/Start 흐름 재사용
+- Yacht Dice Socket 이벤트를 `yacht:*` Prefix로 완전 분리
+- Yacht Dice 방 목록 자동 갱신 추가
+- 방장 위임, 최대 6명, 2명 이상 및 전원 Ready 시작 조건 추가
+- Roll/Hold/점수판은 다음 버전으로 분리

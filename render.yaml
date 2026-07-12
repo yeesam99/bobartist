@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: bobartist-server
+    name: bobplatform-server
     env: node
     rootDir: server
     plan: free

@@ -1471,7 +1471,7 @@ body:has(#gamePage:not(.hidden)) {
   }
 }
 
-/* v0.0.50: show compact hide ranking lines in the result status */
+/* v0.0.52: keep compact hide ranking lines in the result status */
 .top-action-status {
   white-space: pre-line;
 }
