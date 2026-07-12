@@ -1,4 +1,4 @@
-# BobPlatform v0.0.60
+# BobPlatform v0.0.61
 
 - 공통 채팅 전송 후 입력창 포커스 유지
 - `#/admin/chat` 조회 전용 관리자 채팅 모니터 추가
@@ -6,7 +6,7 @@
 - 전체/게임/방 채널 필터 및 닉네임·방 코드·메시지 검색 추가
 - 활성 채널, 채팅 참여 인원, 메모리 로그 수 요약 추가
 
-# BobPlatform v0.0.60 Yacht Dice Input Stability & Multiplayer
+# BobPlatform v0.0.61 Yacht Dice Input Stability & Multiplayer
 
 ## 변경 사항
 
@@ -172,7 +172,7 @@
 - 방장 위임, 최대 6명, 2명 이상 및 전원 Ready 시작 조건 추가
 - Roll/Hold/점수판은 다음 버전으로 분리
 
-## v0.0.60
+## v0.0.61
 - BobPlatform 공통 방 채팅 엔진 추가
 - `/chat/game/{gameId}/{roomCode}` 채널 경로 규칙 적용
 - BobArtist와 Yacht Dice에서 동일한 접이식 채팅 패널 재사용
@@ -181,7 +181,7 @@
 - 서버 참가자 검증, 메시지 200자 제한, 간단한 연속 전송 제한 적용
 - 새 메시지 미확인 개수 표시 및 모바일 전체 화면 채팅 지원
 
-## v0.0.60
+## v0.0.61
 - 관리자 Control Center에 게임 상태 탭 추가
 - BobArtist/Yacht Dice 활성 방, 플레이어, 진행 상태 조회
 - 익명 Client ID 기반 플레이어 접속 이력 추가
