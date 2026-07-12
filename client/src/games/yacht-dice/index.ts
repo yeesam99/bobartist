@@ -2,7 +2,7 @@ import { io, type Socket } from "socket.io-client";
 import "./style.css";
 import { syncRoomChat } from "../../shared/chat";
 
-export const YACHT_DICE_MODULE_VERSION = "0.0.58";
+export const YACHT_DICE_MODULE_VERSION = "0.0.59";
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || "http://localhost:3000";
 
 type ScoreCategory =
@@ -112,7 +112,7 @@ function renderRoom(): void {
     <main class="yacht-shell">
       <header class="yacht-header"><button id="leaveRoom" class="yacht-back" type="button">← 방 나가기</button><div><h1>Yacht Dice</h1><span>v${YACHT_DICE_MODULE_VERSION}</span></div></header>
       <section class="yacht-room-layout">
-        <article class="yacht-panel yacht-room-main"><p class="yacht-kicker">ROOM CODE</p><h2 class="yacht-room-code">${currentRoom.code}</h2><p>친구에게 방 코드를 알려주세요.</p><div class="yacht-rule-summary"><strong>v0.0.58 플레이 범위</strong><span>클래식 13개 점수 · 턴 순환</span><small>점수 선택 시 서버에 저장되고 다음 플레이어로 이동합니다.</small></div></article>
+        <article class="yacht-panel yacht-room-main"><p class="yacht-kicker">ROOM CODE</p><h2 class="yacht-room-code">${currentRoom.code}</h2><p>친구에게 방 코드를 알려주세요.</p><div class="yacht-rule-summary"><strong>v0.0.59 플레이 범위</strong><span>클래식 13개 점수 · 턴 순환</span><small>점수 선택 시 서버에 저장되고 다음 플레이어로 이동합니다.</small></div></article>
         <article class="yacht-panel"><div class="yacht-panel-title"><div><p class="yacht-kicker">PLAYERS</p><h2>플레이어 ${currentRoom.playerCount}/${currentRoom.maxPlayers}</h2></div></div><div class="yacht-player-list">${renderPlayers(currentRoom)}</div>
           ${isHost ? `<button id="startGame" class="yacht-primary" type="button" ${currentRoom.canStart ? "" : "disabled"}>게임 시작</button><p class="yacht-help">2~6명이 참가할 수 있으며, 방장을 제외한 모든 참가자가 Ready여야 시작할 수 있습니다.</p>` : `<button id="toggleReady" class="yacht-primary" type="button">${me?.ready ? "Ready 취소" : "Ready"}</button>`}
           <p class="yacht-status">${escapeHtml(statusMessage)}</p></article>

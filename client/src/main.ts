@@ -1,6 +1,6 @@
 import "./platform.css";
 
-const VERSION = "0.0.58";
+const VERSION = "0.0.59";
 const appElement = document.querySelector<HTMLDivElement>("#app");
 
 if (!appElement) {
@@ -9,12 +9,13 @@ if (!appElement) {
 
 const app = appElement;
 
-type PlatformRoute = "lobby" | "bobartist" | "yacht-dice";
+type PlatformRoute = "lobby" | "bobartist" | "yacht-dice" | "admin-chat";
 
 function getRoute(): PlatformRoute {
   const route = window.location.hash.replace(/^#\/?/, "").toLowerCase();
   if (route === "bobartist") return "bobartist";
   if (route === "yacht-dice") return "yacht-dice";
+  if (route === "admin/chat") return "admin-chat";
   return "lobby";
 }
 
@@ -85,6 +86,7 @@ async function renderBobArtist(): Promise<void> {
 
 async function renderRoute(): Promise<void> {
   const route = getRoute();
+  if (route === "admin-chat") { const { mountAdminChat } = await import("./admin/chat/index"); mountAdminChat(); return; }
   if (route === "bobartist") {
     await renderBobArtist();
     return;

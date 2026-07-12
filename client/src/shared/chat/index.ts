@@ -23,6 +23,9 @@ function ensureRoot(): HTMLElement {
 
 function render(): void {
   const root = ensureRoot();
+  const previousInput = root.querySelector<HTMLInputElement>(".chat-form input");
+  const draft = previousInput?.value || "";
+  const restoreFocus = document.activeElement === previousInput;
   if (!context) { root.innerHTML = ""; root.className = ""; return; }
   root.className = open ? "chat-open" : "";
   root.innerHTML = `<button class="chat-toggle" type="button" aria-label="채팅 열기">💬${unread ? `<b>${unread > 99 ? "99+" : unread}</b>` : ""}</button>
@@ -36,13 +39,20 @@ function render(): void {
     </aside>`;
   root.querySelector<HTMLButtonElement>(".chat-toggle")?.addEventListener("click", () => { open = !open; if (open) unread = 0; render(); });
   root.querySelector<HTMLButtonElement>(".chat-close")?.addEventListener("click", () => { open = false; render(); });
+  const input = root.querySelector<HTMLInputElement>(".chat-form input");
+  if (input) input.value = draft;
   root.querySelector<HTMLFormElement>(".chat-form")?.addEventListener("submit", (event) => {
     event.preventDefault();
-    const input = root.querySelector<HTMLInputElement>(".chat-form input");
     const text = input?.value.trim() || "";
-    if (text && context) { context.socket.emit("chat:send", { channel, text }); if (input) input.value = ""; }
+    if (text && context) {
+      context.socket.emit("chat:send", { channel, text });
+      if (input) { input.value = ""; input.focus(); }
+    }
   });
-  requestAnimationFrame(() => { const list = root.querySelector<HTMLElement>(".chat-messages"); if (list) list.scrollTop = list.scrollHeight; });
+  requestAnimationFrame(() => {
+    const list = root.querySelector<HTMLElement>(".chat-messages"); if (list) list.scrollTop = list.scrollHeight;
+    if (restoreFocus && input) input.focus();
+  });
 }
 
 function bind(socket: Socket): void {
