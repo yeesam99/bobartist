@@ -1,3 +1,67 @@
+# BobPlatform v0.0.57 Yacht Dice Input Stability & Multiplayer
+
+## 변경 사항
+
+- Roll 흔들림 애니메이션 제거
+- Hold/Hold 해제 강조 애니메이션 제거
+- 애니메이션용 타이머와 클릭 직후 강제 재렌더링 제거
+- Hold 클릭 시 Socket 이벤트를 즉시 전송하도록 단순화
+- 실제 주사위 눈 `⚀`~`⚅` 표시는 유지
+- Yacht Dice 최소 2명, 최대 6명 다인 플레이 조건 명확화
+- 3~6명 참가 시 Ready, 시작, 턴 순환, 점수 저장, 종료 판정 검증 범위 추가
+- BobArtist 로직 미수정
+
+## BobPlatform v0.0.56 Yacht Dice Dice Polish
+
+## 주요 변경
+
+- 주사위 숫자 대신 실제 주사위 눈 문자 `⚀`부터 `⚅`까지 표시합니다.
+- Roll 결과가 동기화될 때 고정하지 않은 주사위에 짧은 흔들림 애니메이션을 적용합니다.
+- 주사위 Hold 및 Hold 해제 시 짧은 강조 애니메이션을 적용합니다.
+- 운영체제의 동작 줄이기 설정(`prefers-reduced-motion`)을 존중합니다.
+- Yacht Dice 레이아웃, 점수표, 서버 게임 규칙과 BobArtist 로직은 변경하지 않았습니다.
+
+# BobPlatform v0.0.55 Yacht Dice Viewport Fit Layout
+
+## 주요 변경
+
+- Yacht Dice 게임 화면을 데스크톱 브라우저 높이 안에 들어오도록 재배치했습니다.
+- 플레이어 실시간 순위 영역을 별도 하단 패널에서 점수표 패널 내부로 통합했습니다.
+- 점수표를 2열 압축 배치하고 항목 높이와 여백을 줄였습니다.
+- 기본 데스크톱 화면에서는 페이지 전체 스크롤을 막고 필요한 경우 우측 내부 영역만 스크롤합니다.
+- 작은 화면에서는 기존 반응형 세로 배치를 유지합니다.
+- 게임 규칙, Socket 이벤트, 서버 점수 계산 및 BobArtist 로직은 변경하지 않았습니다.
+
+# BobPlatform v0.0.54 Yacht Dice Score & Turn
+
+## 주요 변경
+
+- 클래식 13개 점수 카테고리 점수표를 추가했습니다.
+- 점수 계산과 저장은 서버에서 처리합니다.
+- 최소 1회 Roll 후 사용하지 않은 점수 항목을 선택할 수 있습니다.
+- 점수 선택 즉시 현재 턴이 종료되고 다음 플레이어로 이동합니다.
+- 다음 턴에는 주사위, Hold, Roll 횟수가 초기화됩니다.
+- 플레이어별 상단 점수, 63점 보너스 35점, 하단 점수, 총점을 계산합니다.
+- 모든 플레이어가 13개 항목을 채우면 게임을 종료하고 최고 점수 승자를 표시합니다.
+- BobArtist Socket 및 게임 로직은 변경하지 않았습니다.
+
+## Yacht Dice Socket
+
+- `yacht:select-score`
+- 기존 `yacht:roll-dice`, `yacht:toggle-hold`, `yacht:game-state` 유지
+
+# BobPlatform v0.0.54 Yacht Dice Roll/Hold Foundation
+
+- Yacht Dice 게임 시작 시 전용 게임 화면으로 전환하도록 추가했습니다.
+- 서버에서 주사위 5개의 결과를 생성하고 모든 참가자에게 실시간 동기화합니다.
+- 현재 턴 플레이어가 Roll 및 주사위별 Hold/해제를 할 수 있습니다.
+- Hold한 주사위는 다음 Roll에서 유지됩니다.
+- 한 턴 최대 3회 Roll 제한과 첫 Roll 이전 Hold 차단을 추가했습니다.
+- 다른 참가자는 동일한 주사위와 Hold 상태를 관전할 수 있습니다.
+- 점수판, 점수 선택, 다음 턴 이동은 다음 버전으로 분리했습니다.
+- BobArtist 게임 로직과 기존 Socket 이벤트는 변경하지 않았습니다.
+- 화면, package, 서버 health 버전을 0.0.54으로 동기화했습니다.
+
 # BobPlatform v0.0.52 Platform Lobby Foundation
 
 - 프로젝트 이름과 버전을 BobPlatform v0.0.52로 전환했습니다.

@@ -4,7 +4,7 @@ import { createServer } from "http";
 import { Server, Socket } from "socket.io";
 import { registerYachtDice } from "./games/yacht-dice";
 
-// BobPlatform v0.0.52 / BobArtist legacy module
+// BobPlatform v0.0.57 / BobArtist legacy module
 // DB 사용 없음: 방 상태와 업로드 이미지는 서버 메모리에만 저장합니다.
 
 type RoomState = "lobby" | "playing" | "ended";
@@ -175,7 +175,7 @@ type PublicRoom = {
   updatedAt: number;
 };
 
-const VERSION = "0.0.52";
+const VERSION = "0.0.57";
 const DEFAULT_DECORATE_DURATION_MS = 60 * 1000;
 const DEFAULT_FIND_DURATION_MS = 5 * 60 * 1000;
 const ALLOWED_DECORATE_DURATION_MS = new Set([

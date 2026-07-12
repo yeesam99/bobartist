@@ -135,7 +135,7 @@ const STORAGE_KEYS = {
 } as const;
 
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || "http://localhost:3000";
-const VERSION = "0.0.52";
+const VERSION = "0.0.57";
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/jpg"];
 
@@ -355,7 +355,7 @@ app.innerHTML = `
             </div>
           </div>
 
-          <p class="hint">v0.0.52은 BobPlatform에서 기존 은신 순위 기능을 유지합니다.</p>
+          <p class="hint">v0.0.57은 BobPlatform에서 기존 은신 순위 기능을 유지합니다.</p>
         </aside>
       </section>
     </section>
