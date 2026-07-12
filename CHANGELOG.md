@@ -1,4 +1,4 @@
-# BobPlatform v0.0.57 Yacht Dice Input Stability & Multiplayer
+# BobPlatform v0.0.58 Yacht Dice Input Stability & Multiplayer
 
 ## 변경 사항
 
@@ -163,3 +163,12 @@
 - Yacht Dice 방 목록 자동 갱신 추가
 - 방장 위임, 최대 6명, 2명 이상 및 전원 Ready 시작 조건 추가
 - Roll/Hold/점수판은 다음 버전으로 분리
+
+## v0.0.58
+- BobPlatform 공통 방 채팅 엔진 추가
+- `/chat/game/{gameId}/{roomCode}` 채널 경로 규칙 적용
+- BobArtist와 Yacht Dice에서 동일한 접이식 채팅 패널 재사용
+- 방별 최근 메시지 100개를 서버 메모리에 보관하고 재입장 시 복원
+- 채팅 참여/퇴장/연결 종료 시스템 메시지 추가
+- 서버 참가자 검증, 메시지 200자 제한, 간단한 연속 전송 제한 적용
+- 새 메시지 미확인 개수 표시 및 모바일 전체 화면 채팅 지원

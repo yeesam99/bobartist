@@ -1,6 +1,7 @@
 import { io, Socket } from "socket.io-client";
 import "../../style.css";
 
+import { syncRoomChat } from "../../shared/chat";
 type RoomState = "lobby" | "playing" | "ended";
 type GamePhase =
   | "loading"
@@ -135,7 +136,7 @@ const STORAGE_KEYS = {
 } as const;
 
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || "http://localhost:3000";
-const VERSION = "0.0.57";
+const VERSION = "0.0.58";
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/jpg"];
 
@@ -355,7 +356,7 @@ app.innerHTML = `
             </div>
           </div>
 
-          <p class="hint">v0.0.57은 BobPlatform에서 기존 은신 순위 기능을 유지합니다.</p>
+          <p class="hint">v0.0.58은 BobPlatform에서 기존 은신 순위 기능을 유지합니다.</p>
         </aside>
       </section>
     </section>
@@ -1795,6 +1796,7 @@ function renderGameRoom(room: PublicRoom): void {
 
 function renderRoom(room: PublicRoom | null): void {
   currentRoom = room;
+  syncRoomChat(socket && room ? { socket, gameId: "bobartist", roomCode: room.code, nickname: getPlayerName() } : null);
 
   if (!room) {
     lastRenderedRound = 0;
