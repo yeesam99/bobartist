@@ -2,10 +2,10 @@ import express from "express";
 import cors from "cors";
 import { createServer } from "http";
 import { Server, Socket } from "socket.io";
-import { registerYachtDice } from "./games/yacht-dice";
+import { getYachtAdminRooms, registerYachtDice } from "./games/yacht-dice";
 import { registerSharedChat } from "./shared/chat";
 
-// BobPlatform v0.0.59 / BobArtist legacy module
+// BobPlatform v0.0.60 / BobArtist legacy module
 // DB 사용 없음: 방 상태와 업로드 이미지는 서버 메모리에만 저장합니다.
 
 type RoomState = "lobby" | "playing" | "ended";
@@ -176,7 +176,7 @@ type PublicRoom = {
   updatedAt: number;
 };
 
-const VERSION = "0.0.59";
+const VERSION = "0.0.60";
 const DEFAULT_DECORATE_DURATION_MS = 60 * 1000;
 const DEFAULT_FIND_DURATION_MS = 5 * 60 * 1000;
 const ALLOWED_DECORATE_DURATION_MS = new Set([
@@ -1294,7 +1294,26 @@ app.get("/images/:imageId", (req, res) => {
   res.send(image.buffer);
 });
 
-registerSharedChat(io);
+function getBobArtistAdminRooms() {
+  return [...rooms.values()].map((room) => ({
+    gameId: "bobartist" as const,
+    roomCode: room.code,
+    state: room.state,
+    playerCount: room.players.length,
+    maxPlayers: MAX_PLAYERS,
+    players: room.players.map((player) => ({ id: player.socketId, nickname: player.name, isHost: player.socketId === room.hostSocketId })),
+    detail: {
+      phase: room.game?.phase || room.state,
+      round: room.game?.round ?? 0,
+      spy: room.players.find((player) => player.role === "spy")?.name || "-",
+      caught: room.caughtTargetIds.length,
+      submissions: Object.keys(room.submissions).length,
+    },
+    updatedAt: room.updatedAt,
+  }));
+}
+
+registerSharedChat(io, () => [...getBobArtistAdminRooms(), ...getYachtAdminRooms()]);
 registerYachtDice(io);
 
 io.on("connection", (socket) => {

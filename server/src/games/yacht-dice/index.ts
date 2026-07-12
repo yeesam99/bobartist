@@ -256,6 +256,25 @@ function leaveRoom(io: Server, socket: Socket): void {
   emitGame(io, room);
 }
 
+
+export function getYachtAdminRooms() {
+  return [...rooms.values()].map((room) => ({
+    gameId: "yacht-dice" as const,
+    roomCode: room.code,
+    state: room.state,
+    playerCount: room.players.length,
+    maxPlayers: MAX_PLAYERS,
+    players: room.players.map((player) => ({ id: player.id, nickname: player.name, isHost: player.isHost })),
+    detail: {
+      round: room.game?.round ?? 0,
+      maxRounds: room.game?.maxRounds ?? MAX_ROUNDS,
+      currentTurn: room.players.find((player) => player.id === room.game?.currentPlayerId)?.name || "-",
+      rollCount: room.game?.rollCount ?? 0,
+      phase: room.game?.phase || room.state,
+    },
+    updatedAt: room.updatedAt,
+  }));
+}
 export function registerYachtDice(io: Server): void {
   io.on("connection", (socket) => {
     socket.on("yacht:request-room-list", () => emitRoomList(io));

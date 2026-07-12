@@ -11,6 +11,13 @@ let open = false;
 let unread = 0;
 let boundSocket: Socket | null = null;
 
+function getClientId(): string {
+  const key = "bobPlatformClientId";
+  let value = localStorage.getItem(key);
+  if (!value) { value = `c_${crypto.randomUUID().replace(/-/g, "")}`; localStorage.setItem(key, value); }
+  return value;
+}
+
 function pathOf(ctx: ChatContext): string { return `/chat/game/${ctx.gameId}/${ctx.roomCode}`; }
 function escapeHtml(value: string): string { return value.replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c] || c)); }
 function timeOf(value: number): string { return new Date(value).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }); }
@@ -69,6 +76,6 @@ export function syncRoomChat(next: ChatContext | null): void {
   if (!next) { context = null; channel = ""; messages = []; unread = 0; open = false; render(); return; }
   bind(next.socket);
   context = next;
-  if (channel !== nextChannel) { channel = nextChannel; messages = []; unread = 0; next.socket.emit("chat:join", { channel, nickname: next.nickname }); }
+  if (channel !== nextChannel) { channel = nextChannel; messages = []; unread = 0; next.socket.emit("chat:join", { channel, nickname: next.nickname, clientId: getClientId() }); }
   render();
 }
