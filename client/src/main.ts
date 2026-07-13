@@ -1,6 +1,6 @@
 import "./platform.css";
 
-const VERSION = "0.0.61";
+const VERSION = "0.0.62";
 const appElement = document.querySelector<HTMLDivElement>("#app");
 
 if (!appElement) {
@@ -9,12 +9,13 @@ if (!appElement) {
 
 const app = appElement;
 
-type PlatformRoute = "lobby" | "bobartist" | "yacht-dice" | "admin-chat";
+type PlatformRoute = "lobby" | "bobartist" | "yacht-dice" | "indian-poker" | "admin-chat";
 
 function getRoute(): PlatformRoute {
   const route = window.location.hash.replace(/^#\/?/, "").toLowerCase();
   if (route === "bobartist") return "bobartist";
   if (route === "yacht-dice") return "yacht-dice";
+  if (route === "indian-poker") return "indian-poker";
   if (route === "admin/chat") return "admin-chat";
   return "lobby";
 }
@@ -44,10 +45,17 @@ function renderLobby(): void {
         </button>
 
         <button id="openYachtDice" class="platform-game-card" type="button">
-          <span class="platform-game-status preparing">STEP 1</span>
+          <span class="platform-game-status playable">PLAYABLE</span>
           <strong>Yacht Dice</strong>
           <span>5개의 주사위로 점수 조합을 완성하는 전략 주사위 게임</span>
-          <em>준비 화면 보기</em>
+          <em>게임 입장</em>
+        </button>
+
+        <button id="openIndianPoker" class="platform-game-card" type="button">
+          <span class="platform-game-status preparing">STEP 1</span>
+          <strong>Bob Indian Poker</strong>
+          <span>자신의 카드는 보지 못하고 상대 카드만 보는 클래식 인디언 포커</span>
+          <em>게임 입장</em>
         </button>
       </section>
     </main>
@@ -59,6 +67,9 @@ function renderLobby(): void {
   document.querySelector<HTMLButtonElement>("#openYachtDice")?.addEventListener("click", () => {
     navigate("yacht-dice");
   });
+  document.querySelector<HTMLButtonElement>("#openIndianPoker")?.addEventListener("click", () => {
+    navigate("indian-poker");
+  });
 }
 
 async function renderYachtDice(): Promise<void> {
@@ -66,6 +77,13 @@ async function renderYachtDice(): Promise<void> {
   document.body.classList.remove("platform-body");
   const { mountYachtDice } = await import("./games/yacht-dice/index");
   mountYachtDice();
+}
+
+async function renderIndianPoker(): Promise<void> {
+  document.title = `Bob Indian Poker | BobPlatform v${VERSION}`;
+  document.body.classList.remove("platform-body");
+  const { mountIndianPoker } = await import("./games/indian-poker/index");
+  mountIndianPoker();
 }
 
 async function renderBobArtist(): Promise<void> {
@@ -93,6 +111,10 @@ async function renderRoute(): Promise<void> {
   }
   if (route === "yacht-dice") {
     await renderYachtDice();
+    return;
+  }
+  if (route === "indian-poker") {
+    await renderIndianPoker();
     return;
   }
   renderLobby();

@@ -12,7 +12,7 @@ export type ChatMessage = {
 };
 
 export type AdminGameRoom = {
-  gameId: "bobartist" | "yacht-dice";
+  gameId: "bobartist" | "yacht-dice" | "indian-poker";
   roomCode: string;
   state: string;
   playerCount: number;
@@ -52,7 +52,7 @@ const playerAccessRecords = new Map<string, PlayerAccessRecord>();
 
 function normalizeChannel(value: unknown): string {
   const channel = String(value || "").trim().toLowerCase();
-  if (!/^\/chat\/game\/(bobartist|yacht-dice)\/\d{6}$/.test(channel)) throw new Error("유효하지 않은 채팅 채널입니다.");
+  if (!/^\/chat\/game\/(bobartist|yacht-dice|indian-poker)\/\d{6}$/.test(channel)) throw new Error("유효하지 않은 채팅 채널입니다.");
   return channel;
 }
 function normalizeNickname(value: unknown): string { const nickname = String(value || "").trim().slice(0, 16); return nickname || "익명"; }
@@ -61,13 +61,15 @@ function normalizeClientId(value: unknown): string {
   return /^[a-zA-Z0-9_-]{8,80}$/.test(clientId) ? clientId : `legacy_${randomUUID()}`;
 }
 function chatRoom(channel: string): string { return `chat-channel:${channel}`; }
-function channelInfo(channel: string): { gameId: "bobartist" | "yacht-dice"; roomCode: string } {
+function channelInfo(channel: string): { gameId: "bobartist" | "yacht-dice" | "indian-poker"; roomCode: string } {
   const parts = channel.split("/");
   return { gameId: parts[3] === "bobartist" ? "bobartist" : "yacht-dice", roomCode: parts[4] || "" };
 }
 function canAccess(socket: Socket, channel: string): boolean {
   const { gameId, roomCode } = channelInfo(channel);
-  return gameId === "bobartist" ? socket.rooms.has(roomCode) : socket.rooms.has(`yacht:${roomCode}`);
+  if (gameId === "bobartist") return socket.rooms.has(roomCode);
+  if (gameId === "indian-poker") return socket.rooms.has(`indian-poker:${roomCode}`);
+  return socket.rooms.has(`yacht:${roomCode}`);
 }
 function rawIp(socket: Socket): string {
   const forwarded = socket.handshake.headers["x-forwarded-for"];

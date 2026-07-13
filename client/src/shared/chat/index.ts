@@ -2,7 +2,7 @@ import type { Socket } from "socket.io-client";
 import "./style.css";
 
 type ChatMessage = { id: string; channel: string; type: "user" | "system"; playerId?: string; nickname?: string; text: string; createdAt: number };
-type ChatContext = { socket: Socket; gameId: "bobartist" | "yacht-dice"; roomCode: string; nickname: string };
+type ChatContext = { socket: Socket; gameId: "bobartist" | "yacht-dice" | "indian-poker"; roomCode: string; nickname: string };
 
 let context: ChatContext | null = null;
 let channel = "";
