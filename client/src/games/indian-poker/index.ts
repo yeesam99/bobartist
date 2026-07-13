@@ -2,7 +2,7 @@ import { io, type Socket } from "socket.io-client";
 import { syncRoomChat } from "../../shared/chat";
 import "./style.css";
 
-export const INDIAN_POKER_MODULE_VERSION = "0.0.67";
+export const INDIAN_POKER_MODULE_VERSION = "0.0.68";
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || "http://localhost:3000";
 type Card = { suit: "spades"|"hearts"|"diamonds"|"clubs"; rank: string; value: number };
 type Player = { id:string; name:string; ready:boolean; isHost:boolean; chips:number; roundBet:number; contribution:number; folded:boolean; allIn:boolean };
@@ -17,6 +17,7 @@ let status = "서버에 연결 중입니다.";
 let selectedBet = 100;
 let countdownTimer: number | null = null;
 let actionLockedUntil = 0;
+let actionUnlockTimer: number | null = null;
 type ChipAnimation = { kind:"to-pot"|"to-player"; playerId:string; amount:number; key:number };
 let pendingChipAnimations: ChipAnimation[] = [];
 let animationSequence = 0;
@@ -43,10 +44,20 @@ function chipVisualHtml(amount:number, compact=false){
   if(!groups.length)return `<span class="chip-empty">No Chips</span>`;
   return groups.map(group=>`<span class="chip-group chip-${group.value}" title="${group.value} Chips × ${group.count}">${Array.from({length:group.shown},(_,i)=>`<i style="--chip-index:${i}"><b>${group.value}</b></i>`).join("")}${group.count>group.shown?`<em>×${group.count}</em>`:""}</span>`).join("");
 }
+function scheduleActionUnlock(){
+  if(actionUnlockTimer!==null)window.clearTimeout(actionUnlockTimer);
+  const delay=Math.max(0,actionLockedUntil-Date.now())+30;
+  actionUnlockTimer=window.setTimeout(()=>{
+    actionUnlockTimer=null;
+    if(Date.now()>=actionLockedUntil)render();
+    else scheduleActionUnlock();
+  },delay);
+}
 function queueChipAnimation(kind:"to-pot"|"to-player",playerId:string,amount:number){
   if(amount<=0)return;
   pendingChipAnimations.push({kind,playerId,amount,key:++animationSequence});
   actionLockedUntil=Math.max(actionLockedUntil,Date.now()+720);
+  scheduleActionUnlock();
 }
 function playPendingChipAnimations(){
   if(!pendingChipAnimations.length)return;
@@ -77,9 +88,9 @@ function playPendingChipAnimations(){
 function lockAndEmit(event:string,payload?:unknown){
   if(Date.now()<actionLockedUntil)return;
   actionLockedUntil=Date.now()+700;
+  scheduleActionUnlock();
   render();
   if(payload===undefined)socket?.emit(event);else socket?.emit(event,payload);
-  window.setTimeout(()=>{if(Date.now()>=actionLockedUntil)render();},720);
 }
 
 function suitSymbol(card:Card){ return ({spades:"♠",hearts:"♥",diamonds:"♦",clubs:"♣"})[card.suit]; }
@@ -225,5 +236,5 @@ function connect(){
   socket.on("indian-poker:game-started",(payload:{message?:string})=>{status=payload.message||"게임이 시작되었습니다.";render();});
   socket.on("indian-poker:error",(payload:{message?:string})=>{status=payload.message||"요청을 처리하지 못했습니다.";render();});
 }
-export function mountIndianPoker(){room=null;game=null;roomList=[];status="서버에 연결 중입니다.";selectedBet=100;render();connect();}
-export function unmountIndianPoker(){syncRoomChat(null);if(countdownTimer!==null){window.clearInterval(countdownTimer);countdownTimer=null;}socket?.disconnect();socket=null;room=null;game=null;document.body.classList.remove("poker-body");}
+export function mountIndianPoker(){room=null;game=null;roomList=[];status="서버에 연결 중입니다.";selectedBet=100;actionLockedUntil=0;if(actionUnlockTimer!==null){window.clearTimeout(actionUnlockTimer);actionUnlockTimer=null;}render();connect();}
+export function unmountIndianPoker(){syncRoomChat(null);if(countdownTimer!==null){window.clearInterval(countdownTimer);countdownTimer=null;}if(actionUnlockTimer!==null){window.clearTimeout(actionUnlockTimer);actionUnlockTimer=null;}actionLockedUntil=0;socket?.disconnect();socket=null;room=null;game=null;document.body.classList.remove("poker-body");}

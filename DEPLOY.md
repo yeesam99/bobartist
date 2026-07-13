@@ -1,4 +1,4 @@
-# BobPlatform v0.0.67 배포 가이드
+# BobPlatform v0.0.68 배포 가이드
 
 ## 배포 구조
 
@@ -8,7 +8,7 @@ GitHub
 └─ client → Vercel Project
 ```
 
-v0.0.67은 기존 배포 Root Directory를 변경하지 않습니다.
+v0.0.68은 기존 배포 Root Directory를 변경하지 않습니다.
 
 ## Render 서버
 
