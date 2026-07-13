@@ -1,3 +1,13 @@
+
+## v0.0.69 - Indian Poker Blind System
+
+- Removed the fixed Ante system from Bob Indian Poker.
+- Added rotating Dealer, Small Blind, and Big Blind positions.
+- Added 100/200 starting blinds and automatic blind increases every 10 rounds.
+- Added heads-up blind and first-action handling.
+- Added D, SB, and BB seat badges and blind information to the table UI.
+- Blind payments reuse the existing chip-to-pot animation.
+
 # BobPlatform v0.0.68
 
 - 상대 행동의 칩 애니메이션 이후 내 차례 버튼이 계속 비활성화되는 문제 수정
