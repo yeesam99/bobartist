@@ -8,3 +8,24 @@
 .pot-breakdown{display:grid;gap:4px;margin-top:9px;padding-top:8px;border-top:1px solid rgba(213,169,78,.2)}
 .pot-breakdown span{display:flex;justify-content:space-between;color:var(--muted);font-size:9px}
 .pot-breakdown b{color:#f3d572}
+
+.auto-round{display:flex;align-items:center;justify-content:center;gap:7px;border:1px solid rgba(213,169,78,.35);border-radius:9px;padding:6px 9px;background:rgba(213,169,78,.08)}
+.auto-round strong{font-size:20px;color:#f3d572;line-height:1}.auto-round span{font-size:9px;color:var(--muted)}
+
+/* v0.0.67 - visual chips and table movement */
+.table-center-info{min-width:250px}
+.pot-chip-bank{height:48px;display:flex;align-items:flex-end;justify-content:center;gap:9px;margin:3px 0 5px;position:relative}
+.chip-group{position:relative;display:inline-block;width:34px;height:42px;flex:0 0 34px}
+.chip-group i{--chip-index:0;position:absolute;left:1px;bottom:calc(var(--chip-index)*3px);width:31px;height:12px;border-radius:50%;border:2px dashed rgba(255,255,255,.82);box-shadow:0 2px 0 rgba(0,0,0,.4),inset 0 0 0 3px rgba(255,255,255,.18);display:grid;place-items:center;font-style:normal}
+.chip-group i:after{content:"";position:absolute;inset:2px;border-radius:50%;border:1px solid rgba(255,255,255,.55)}
+.chip-group b{font-size:6px;line-height:1;color:#fff;text-shadow:0 1px 2px #000;z-index:1}
+.chip-group em{position:absolute;right:-7px;top:-3px;padding:1px 4px;border-radius:7px;background:#03130f;color:#f3d572;border:1px solid var(--line);font-size:7px;font-style:normal;z-index:20}
+.chip-10 i,.flying-chip.chip-10{background:#eee;color:#222;border-color:#8a8a8a}
+.chip-10 b{color:#222;text-shadow:none}.chip-50 i,.flying-chip.chip-50{background:#c63030}.chip-100 i,.flying-chip.chip-100{background:#245ca8}.chip-500 i,.flying-chip.chip-500{background:#171717;border-color:#d4b45f}
+.chip-empty{font-size:8px;color:var(--muted);align-self:center}
+.flying-chip{position:absolute;z-index:50;width:36px;height:36px;border-radius:50%;border:3px dashed rgba(255,255,255,.88);display:grid;place-items:center;pointer-events:none;box-shadow:0 5px 15px rgba(0,0,0,.45),inset 0 0 0 4px rgba(255,255,255,.17);animation:chip-fly .68s cubic-bezier(.2,.75,.2,1) forwards}
+.flying-chip b{font-size:7px;color:#fff;text-shadow:0 1px 2px #000}
+@keyframes chip-fly{0%{transform:translate(0,0) scale(.82) rotate(0);opacity:0}12%{opacity:1}70%{transform:translate(var(--fly-x),var(--fly-y)) scale(1.06) rotate(300deg);opacity:1}100%{transform:translate(var(--fly-x),var(--fly-y)) scale(.5) rotate(380deg);opacity:0}}
+.table-seat.is-winner:after{content:"POT WIN";position:absolute;left:50%;top:-14px;transform:translateX(-50%);background:#d5a94e;color:#241a08;border-radius:8px;padding:2px 7px;font-size:7px;font-weight:900;letter-spacing:.08em;white-space:nowrap}
+@media(prefers-reduced-motion:reduce){.flying-chip{animation:none;display:none}.table-seat{transition:none}}
+@media(max-width:760px){.table-center-info{min-width:205px}.pot-chip-bank{height:40px;gap:5px}.chip-group{transform:scale(.84);margin:-3px}}

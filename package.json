@@ -1,6 +1,6 @@
 {
   "name": "bobplatform",
-  "version": "0.0.65",
+  "version": "0.0.67",
   "private": true,
   "description": "BobPlatform multi-game web platform",
   "engines": {

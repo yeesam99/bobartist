@@ -1,4 +1,4 @@
-# BobPlatform v0.0.65 배포 가이드
+# BobPlatform v0.0.67 배포 가이드
 
 ## 배포 구조
 
@@ -8,7 +8,7 @@ GitHub
 └─ client → Vercel Project
 ```
 
-v0.0.65은 기존 배포 Root Directory를 변경하지 않습니다.
+v0.0.67은 기존 배포 Root Directory를 변경하지 않습니다.
 
 ## Render 서버
 
@@ -50,7 +50,7 @@ VITE_SERVER_URL=https://YOUR_RENDER_SERVICE.onrender.com
 1. 기본 URL에서 BobPlatform 로비 표시
 2. BobArtist 진입 후 방 생성과 입장
 3. Yacht Dice 준비 화면 진입과 로비 복귀
-4. Render `/health` 응답 버전 0.0.65
+4. Render `/health` 응답 버전 0.0.67
 5. Vercel 클라이언트의 Socket 연결 주소와 CORS 확인
 
 
