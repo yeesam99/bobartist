@@ -2,7 +2,7 @@ import { io, type Socket } from "socket.io-client";
 import { syncRoomChat } from "../../shared/chat";
 import "./style.css";
 
-export const INDIAN_POKER_MODULE_VERSION = "0.0.69";
+export const INDIAN_POKER_MODULE_VERSION = "0.0.71";
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || "http://localhost:3000";
 type Card = { suit: "spades"|"hearts"|"diamonds"|"clubs"; rank: string; value: number };
 type Player = { id:string; name:string; ready:boolean; isHost:boolean; chips:number; roundBet:number; contribution:number; folded:boolean; allIn:boolean };
@@ -21,6 +21,7 @@ let actionUnlockTimer: number | null = null;
 type ChipAnimation = { kind:"to-pot"|"to-player"; playerId:string; amount:number; key:number };
 let pendingChipAnimations: ChipAnimation[] = [];
 let animationSequence = 0;
+let resizeCleanupBound = false;
 
 const app = () => { const el=document.querySelector<HTMLDivElement>("#app"); if(!el) throw new Error("#app element not found"); return el; };
 const esc = (v:string) => v.replace(/[&<>'"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c]||c));
@@ -59,29 +60,45 @@ function queueChipAnimation(kind:"to-pot"|"to-player",playerId:string,amount:num
   actionLockedUntil=Math.max(actionLockedUntil,Date.now()+720);
   scheduleActionUnlock();
 }
+function clearFlyingChips(){
+  document.querySelectorAll(".flying-chip").forEach(chip=>chip.remove());
+}
+function bindResponsiveAnimationCleanup(){
+  if(resizeCleanupBound)return;
+  resizeCleanupBound=true;
+  const cleanup=()=>{clearFlyingChips();pendingChipAnimations=[];};
+  window.addEventListener("resize",cleanup,{passive:true});
+  window.addEventListener("orientationchange",cleanup,{passive:true});
+}
 function playPendingChipAnimations(){
   if(!pendingChipAnimations.length)return;
   const stage=document.querySelector<HTMLElement>(".poker-table-felt");
+  const layer=document.querySelector<HTMLElement>(".poker-animation-layer");
   const pot=document.querySelector<HTMLElement>(".pot-chip-bank");
-  if(!stage||!pot){pendingChipAnimations=[];return;}
+  if(!stage||!layer||!pot){pendingChipAnimations=[];return;}
   const stageRect=stage.getBoundingClientRect();
   const potRect=pot.getBoundingClientRect();
+  const isSmallScreen=stageRect.width<=760;
   const animations=pendingChipAnimations.splice(0);
-  animations.forEach((animation,index)=>{
+  const visibleAnimations=isSmallScreen?animations.slice(0,1):animations;
+  visibleAnimations.forEach((animation,index)=>{
     const seat=document.querySelector<HTMLElement>(`[data-player-id="${CSS.escape(animation.playerId)}"]`);
     if(!seat)return;
     const seatRect=seat.getBoundingClientRect();
     const from=animation.kind==="to-pot"?seatRect:potRect;
     const to=animation.kind==="to-pot"?potRect:seatRect;
+    const chipSize=Math.max(20,Math.min(36,stageRect.width*0.035));
     const token=document.createElement("div");
     token.className=`flying-chip chip-${chipBreakdown(animation.amount,1)[0]?.value||100}`;
     token.innerHTML=`<b>${animation.amount>=1000?"+"+formatChips(animation.amount):formatChips(animation.amount)}</b>`;
-    token.style.left=`${from.left-stageRect.left+from.width/2-18}px`;
-    token.style.top=`${from.top-stageRect.top+from.height/2-18}px`;
+    token.style.width=`${chipSize}px`;
+    token.style.height=`${chipSize}px`;
+    token.style.left=`${from.left-stageRect.left+from.width/2-chipSize/2}px`;
+    token.style.top=`${from.top-stageRect.top+from.height/2-chipSize/2}px`;
     token.style.setProperty("--fly-x",`${to.left-from.left+(to.width-from.width)/2}px`);
     token.style.setProperty("--fly-y",`${to.top-from.top+(to.height-from.height)/2}px`);
     token.style.animationDelay=`${index*90}ms`;
-    stage.appendChild(token);
+    layer.appendChild(token);
     window.setTimeout(()=>token.remove(),900+index*90);
   });
 }
@@ -186,6 +203,7 @@ function renderGame(){
     <section class="poker-game-stage">
       <div class="poker-table-wrap">
         <div class="poker-table-felt">
+          <div class="poker-animation-layer" aria-hidden="true"></div>
           <div class="table-brand"><span>BOB</span><strong>INDIAN POKER</strong></div>
           <div class="table-center-info"><p>POT</p><strong>${formatChips(currentGame.pot)}</strong><div class="pot-chip-bank" aria-label="Pot Chips">${chipVisualHtml(currentGame.pot)}</div><small>Blinds ${formatChips(currentGame.smallBlind)} / ${formatChips(currentGame.bigBlind)} · Current Bet ${formatChips(currentGame.currentBet)}</small></div>
           <div class="deck-stack" aria-hidden="true"><i></i><i></i><i></i></div>
@@ -217,6 +235,7 @@ function renderGame(){
   window.requestAnimationFrame(playPendingChipAnimations);
 }
 function connect(){
+  bindResponsiveAnimationCleanup();
   socket=io(SERVER_URL,{transports:["websocket","polling"]});
   socket.on("connect",()=>{status="서버에 연결되었습니다.";socket?.emit("indian-poker:request-room-list");render();});
   socket.on("disconnect",()=>{status="서버 연결이 끊겼습니다.";render();});

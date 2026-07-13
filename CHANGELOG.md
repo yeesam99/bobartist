@@ -1,5 +1,20 @@
+# BobPlatform v0.0.71
 
-## v0.0.69 - Indian Poker Blind System
+- Indian Poker 칩 이동 애니메이션을 테이블 크기에 맞춰 반응형으로 조정
+- 애니메이션 전용 레이어를 추가해 칩이 게임 UI 바깥을 침범하지 않도록 개선
+- 브라우저 확대·축소, 창 크기 변경, 화면 회전 시 진행 중 애니메이션 정리
+- 모바일에서는 대표 칩 1개만 이동하도록 단순화
+- 작은 화면에서 테이블 높이와 좌석·카드 크기를 축소해 액션바 겹침 완화
+
+# BobPlatform v0.0.70
+
+- Bob Indian Poker 공통 채팅 입장 권한 오류 수정
+- 공통 채팅 채널의 `indian-poker` 게임 ID 판별 수정
+- 관리자 Control Center에서 Indian Poker 채널 및 방 명칭 정상 표시
+- 기존 BobArtist 및 Yacht Dice 채팅 로직 유지
+
+
+## v0.0.70 - Indian Poker Blind System
 
 - Removed the fixed Ante system from Bob Indian Poker.
 - Added rotating Dealer, Small Blind, and Big Blind positions.

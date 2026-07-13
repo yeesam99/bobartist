@@ -63,7 +63,9 @@ function normalizeClientId(value: unknown): string {
 function chatRoom(channel: string): string { return `chat-channel:${channel}`; }
 function channelInfo(channel: string): { gameId: "bobartist" | "yacht-dice" | "indian-poker"; roomCode: string } {
   const parts = channel.split("/");
-  return { gameId: parts[3] === "bobartist" ? "bobartist" : "yacht-dice", roomCode: parts[4] || "" };
+  const gameId = parts[3];
+  if (gameId !== "bobartist" && gameId !== "yacht-dice" && gameId !== "indian-poker") throw new Error("유효하지 않은 게임 채널입니다.");
+  return { gameId, roomCode: parts[4] || "" };
 }
 function canAccess(socket: Socket, channel: string): boolean {
   const { gameId, roomCode } = channelInfo(channel);

@@ -1,6 +1,6 @@
 import "./platform.css";
 
-const VERSION = "0.0.69";
+const VERSION = "0.0.70";
 const appElement = document.querySelector<HTMLDivElement>("#app");
 
 if (!appElement) {

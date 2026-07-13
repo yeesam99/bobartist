@@ -4,7 +4,7 @@ import "./style.css";
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || "http://localhost:3000";
 type Message = { id:string; channel:string; type:"user"|"system"; nickname?:string; text:string; createdAt:number };
 type Channel = { channel:string; gameId:string; roomCode:string; messageCount:number; activeUsers:number; lastMessageAt:number };
-type GameRoom = { gameId:"bobartist"|"yacht-dice"; roomCode:string; state:string; playerCount:number; maxPlayers:number; players:Array<{id:string;nickname:string;isHost:boolean}>; detail:Record<string,string|number|boolean|null>; updatedAt:number };
+type GameRoom = { gameId:"bobartist"|"yacht-dice"|"indian-poker"; roomCode:string; state:string; playerCount:number; maxPlayers:number; players:Array<{id:string;nickname:string;isHost:boolean}>; detail:Record<string,string|number|boolean|null>; updatedAt:number };
 type NicknameHistory = { nickname:string; firstUsedAt:number; lastUsedAt:number; useCount:number };
 type AccessHistory = { gameId:string; roomCode:string; joinedAt:number; lastSeenAt:number };
 type PlayerRecord = { clientId:string; connectionKey:string; maskedIp:string; firstSeenAt:number; lastSeenAt:number; connectionCount:number; nicknames:NicknameHistory[]; accesses:AccessHistory[] };
@@ -19,7 +19,7 @@ let tab: Tab = "chat";
 
 const esc=(v:string)=>v.replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]||c));
 const time=(v:number)=>new Date(v).toLocaleString("ko-KR",{month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit"});
-const gameName=(id:string)=>id==="bobartist"?"BobArtist":"Yacht Dice";
+const gameName=(id:string)=>id==="bobartist"?"BobArtist":id==="indian-poker"?"Bob Indian Poker":"Yacht Dice";
 function root(){ const el=document.querySelector<HTMLDivElement>("#app"); if(!el) throw new Error("#app not found"); return el; }
 function allMessages():Message[]{ return Object.values(snapshot.histories).flat().sort((a,b)=>a.createdAt-b.createdAt); }
 function filteredMessages():Message[]{ const list=selected==="all"?allMessages():(snapshot.histories[selected]||[]); const q=query.trim().toLowerCase(); return q?list.filter(m=>`${m.channel} ${m.nickname||"system"} ${m.text}`.toLowerCase().includes(q)):list; }

@@ -34,3 +34,10 @@
 .blind-badges{position:absolute;right:7px;top:-10px;display:flex;gap:3px;z-index:8}
 .blind-badge{min-width:22px;height:22px;padding:0 5px;border-radius:11px;display:grid;place-items:center;font-size:7px;font-weight:900;border:1px solid rgba(255,255,255,.65);box-shadow:0 3px 8px rgba(0,0,0,.35)}
 .blind-d{background:#f3d572;color:#2b210a}.blind-sb{background:#dce5ec;color:#15232b}.blind-bb{background:#bf4b35;color:#fff}
+
+/* v0.0.71 - responsive animation and small-screen stabilization */
+.poker-animation-layer{position:absolute;inset:0;overflow:hidden;pointer-events:none;border-radius:inherit;z-index:40;contain:layout paint}
+.flying-chip{width:clamp(20px,3vw,36px);height:clamp(20px,3vw,36px);border-width:clamp(2px,.22vw,3px)}
+@media(max-width:1050px){.poker-table-wrap{height:clamp(520px,68vh,650px)}}
+@media(max-width:760px){.poker-table-wrap{height:clamp(500px,64vh,620px)}.flying-chip{width:24px;height:24px;border-width:2px}.flying-chip b{font-size:6px}.game-side-panel{grid-template-columns:1fr}.poker-action-bar{position:relative;z-index:60}.table-center-info{max-width:52vw}.table-seat{max-width:31vw}}
+@media(max-width:480px){.poker-table-wrap{height:clamp(460px,61vh,560px)}.table-seat{width:100px;max-width:30vw}.seat-card{height:58px}.poker-card{width:40px;height:56px}.table-center-info{min-width:145px;max-width:50vw}.pot-chip-bank{transform:scale(.82);transform-origin:center}.action-main button{min-height:42px}}
