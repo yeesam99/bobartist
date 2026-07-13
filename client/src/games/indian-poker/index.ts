@@ -2,12 +2,13 @@ import { io, type Socket } from "socket.io-client";
 import { syncRoomChat } from "../../shared/chat";
 import "./style.css";
 
-export const INDIAN_POKER_MODULE_VERSION = "0.0.64";
+export const INDIAN_POKER_MODULE_VERSION = "0.0.65";
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || "http://localhost:3000";
 type Card = { suit: "spades"|"hearts"|"diamonds"|"clubs"; rank: string; value: number };
-type Player = { id:string; name:string; ready:boolean; isHost:boolean; chips:number; roundBet:number };
+type Player = { id:string; name:string; ready:boolean; isHost:boolean; chips:number; roundBet:number; contribution:number; folded:boolean; allIn:boolean };
 type Room = { code:string; state:"lobby"|"playing"|"revealed"; playerCount:number; maxPlayers:number; canStart:boolean; startingChips:number; players:Player[] };
-type Game = { roomCode:string; phase:"betting"|"revealed"; round:number; cards:Record<string,Card|null>; winnerIds:string[]; pot:number; ante:number; currentBet:number; currentTurnId:string; actedIds:string[]; lastAction:string };
+type PotResult = { amount:number; eligibleIds:string[]; winnerIds:string[] };
+type Game = { roomCode:string; phase:"betting"|"revealed"; round:number; cards:Record<string,Card|null>; winnerIds:string[]; pot:number; ante:number; currentBet:number; currentTurnId:string; actedIds:string[]; lastAction:string; potResults:PotResult[]; tournamentWinnerId:string };
 let socket: Socket | null = null;
 let room: Room | null = null;
 let game: Game | null = null;
@@ -56,7 +57,7 @@ function playersHtml(){
 function renderRoom(){
   if(!room||!socket)return;
   const me=room.players.find(p=>p.id===socket?.id);
-  app().innerHTML=`<main class="poker-shell lobby-shell">${header("leaveRoom","방 나가기")}<section class="poker-grid"><article class="poker-panel hero"><p class="kicker">ROOM CODE</p><h2 class="room-code">${room.code}</h2><p>친구에게 방 코드를 알려주세요.</p><div class="rule-box"><strong>시작 Chips ${formatChips(room.startingChips)}</strong><span>Ante 100 · Check · Bet · Call</span><small>Raise, Fold, All In, Side Pot은 다음 버전에서 추가됩니다.</small></div></article><article class="poker-panel"><div class="panel-title"><div><p class="kicker">PLAYERS</p><h2>${room.playerCount}/${room.maxPlayers}</h2></div></div><div class="player-list">${playersHtml()}</div>${me?.isHost?`<button id="startGame" class="primary" ${room.canStart?"":"disabled"}>게임 시작</button><p class="help">2~6명, 방장을 제외한 모든 참가자가 Ready여야 합니다.</p>`:`<button id="toggleReady" class="primary">${me?.ready?"Ready 취소":"Ready"}</button>`}<p class="status">${esc(status)}</p></article></section></main>`;
+  app().innerHTML=`<main class="poker-shell lobby-shell">${header("leaveRoom","방 나가기")}<section class="poker-grid"><article class="poker-panel hero"><p class="kicker">ROOM CODE</p><h2 class="room-code">${room.code}</h2><p>친구에게 방 코드를 알려주세요.</p><div class="rule-box"><strong>시작 Chips ${formatChips(room.startingChips)}</strong><span>Ante 100 · Check · Bet · Call · Raise · Fold · All In</span><small>Main Pot과 Side Pot이 자동으로 정산됩니다.</small></div></article><article class="poker-panel"><div class="panel-title"><div><p class="kicker">PLAYERS</p><h2>${room.playerCount}/${room.maxPlayers}</h2></div></div><div class="player-list">${playersHtml()}</div>${me?.isHost?`<button id="startGame" class="primary" ${room.canStart?"":"disabled"}>게임 시작</button><p class="help">2~6명, 방장을 제외한 모든 참가자가 Ready여야 합니다.</p>`:`<button id="toggleReady" class="primary">${me?.ready?"Ready 취소":"Ready"}</button>`}<p class="status">${esc(status)}</p></article></section></main>`;
   document.querySelector<HTMLButtonElement>("#leaveRoom")?.addEventListener("click",()=>socket?.emit("indian-poker:leave-room"));
   document.querySelector<HTMLButtonElement>("#toggleReady")?.addEventListener("click",()=>socket?.emit("indian-poker:toggle-ready"));
   document.querySelector<HTMLButtonElement>("#startGame")?.addEventListener("click",()=>socket?.emit("indian-poker:start-game"));
@@ -66,11 +67,12 @@ function playerSeatHtml(player:Player, seatClass:string, myId:string, revealed:b
   const initial=esc(player.name.slice(0,1).toUpperCase()||"P");
   const isTurn=game?.currentTurnId===player.id;
   const isWinner=revealed&&game?.winnerIds.includes(player.id);
-  return `<article class="table-seat ${seatClass} ${player.id===myId?"is-me":""} ${isTurn?"is-turn":""} ${isWinner?"is-winner":""}">
-    <div class="seat-profile"><span class="seat-avatar">${initial}</span><div><strong>${esc(player.name)}${player.id===myId?" (나)":""}</strong><small>${isTurn?"현재 차례":player.isHost?"HOST":"PLAYER"}</small></div></div>
+  const stateLabel=player.folded?"FOLD":player.allIn?"ALL IN":isWinner?"WINNER":player.roundBet>0?`BET ${formatChips(player.roundBet)}`:"IN GAME";
+  return `<article class="table-seat ${seatClass} ${player.id===myId?"is-me":""} ${isTurn?"is-turn":""} ${isWinner?"is-winner":""} ${player.folded?"is-folded":""} ${player.allIn?"is-all-in":""}">
+    <div class="seat-profile"><span class="seat-avatar">${initial}</span><div><strong>${esc(player.name)}${player.id===myId?" (나)":""}</strong><small>${isTurn?"현재 차례":player.folded?"FOLDED":player.allIn?"ALL IN":player.isHost?"HOST":"PLAYER"}</small></div></div>
     <div class="seat-card">${cardHtml(card,player.id===myId&&!revealed)}</div>
     <div class="seat-chips"><strong>${formatChips(player.chips)}</strong><span>Chips</span></div>
-    <div class="seat-meta"><span>${isWinner?"WINNER":player.roundBet>0?`BET ${formatChips(player.roundBet)}`:"IN GAME"}</span><em>${game?.actedIds.includes(player.id)?"ACTED":"WAIT"}</em></div>
+    <div class="seat-meta"><span>${stateLabel}</span><em>${game?.actedIds.includes(player.id)||player.folded||player.allIn?"ACTED":"WAIT"}</em></div>
   </article>`;
 }
 function renderGame(){
@@ -86,11 +88,15 @@ function renderGame(){
   const callAmount=Math.max(0,currentGame.currentBet-(me?.roundBet||0));
   const canCheck=myTurn&&callAmount===0;
   const canBet=myTurn&&currentGame.currentBet===0;
-  const canCall=myTurn&&callAmount>0&&(me?.chips||0)>=callAmount;
+  const canCall=myTurn&&callAmount>0&&(me?.chips||0)>callAmount;
+  const canRaise=myTurn&&currentGame.currentBet>0&&(me?.chips||0)>callAmount+selectedBet;
+  const canFold=myTurn;
+  const canAllIn=myTurn&&(me?.chips||0)>0;
   const turnPlayer=currentRoom.players.find(p=>p.id===currentGame.currentTurnId);
+  const finalWinner=currentRoom.players.find(p=>p.id===currentGame.tournamentWinnerId);
   app().innerHTML=`<main class="poker-shell game-shell">
     ${header("leaveRoom","방 나가기")}
-    <section class="compact-status ${revealed?"revealed":""}"><div><p class="kicker">ROUND ${currentGame.round}</p><strong>${revealed?(winners.length>1?`${esc(winners.join(", "))} 공동 승리`:`${esc(winners[0]||"")} 승리`):myTurn?"내 차례입니다":`${esc(turnPlayer?.name||"")}님 차례`}</strong></div><span>${esc(currentGame.lastAction)}</span></section>
+    <section class="compact-status ${revealed?"revealed":""}"><div><p class="kicker">ROUND ${currentGame.round}</p><strong>${currentGame.tournamentWinnerId?`${esc(finalWinner?.name||"")} 최종 우승`:revealed?(winners.length>1?`${esc(winners.join(", "))} 공동 승리`:`${esc(winners[0]||"")} 승리`):myTurn?"내 차례입니다":`${esc(turnPlayer?.name||"")}님 차례`}</strong></div><span>${esc(currentGame.lastAction)}</span></section>
     <section class="poker-game-stage">
       <div class="poker-table-wrap">
         <div class="poker-table-felt">
@@ -102,14 +108,14 @@ function renderGame(){
         </div>
       </div>
       <aside class="game-side-panel">
-        <div class="side-summary"><p class="kicker">GAME INFO</p><h2>Round ${currentGame.round}</h2><dl><div><dt>Pot</dt><dd>${formatChips(currentGame.pot)}</dd></div><div><dt>내 Chips</dt><dd>${formatChips(me?.chips||0)}</dd></div><div><dt>현재 Bet</dt><dd>${formatChips(currentGame.currentBet)}</dd></div><div><dt>방 코드</dt><dd>${currentRoom.code}</dd></div></dl></div>
+        <div class="side-summary"><p class="kicker">GAME INFO</p><h2>Round ${currentGame.round}</h2><dl><div><dt>Pot</dt><dd>${formatChips(currentGame.pot)}</dd></div><div><dt>내 Chips</dt><dd>${formatChips(me?.chips||0)}</dd></div><div><dt>현재 Bet</dt><dd>${formatChips(currentGame.currentBet)}</dd></div><div><dt>방 코드</dt><dd>${currentRoom.code}</dd></div></dl>${revealed&&currentGame.potResults.length?`<div class="pot-breakdown">${currentGame.potResults.map((pot,index)=>`<span>${index===0?"Main Pot":`Side Pot ${index}`} <b>${formatChips(pot.amount)}</b></span>`).join("")}</div>`:""}</div>
         <div class="turn-message"><span class="turn-dot"></span><strong>${revealed?"라운드 종료":myTurn?"행동을 선택하세요":`${esc(turnPlayer?.name||"")}님을 기다리는 중`}</strong><small>${revealed?"방장이 다음 라운드를 시작합니다.":callAmount>0?`Call ${formatChips(callAmount)} 필요`:"Check 또는 Bet을 선택할 수 있습니다."}</small></div>
       </aside>
     </section>
     <section class="poker-action-bar">
-      <div class="action-main"><button id="checkAction" ${canCheck?"":"disabled"}>Check</button><button id="betAction" ${canBet?"":"disabled"}>Bet ${formatChips(selectedBet)}</button><button id="callAction" ${canCall?"":"disabled"}>Call${callAmount?` ${formatChips(callAmount)}`:""}</button><button disabled>Raise</button><button disabled>Fold</button><button disabled>All In</button></div>
-      <div class="bet-presets"><span>Bet 금액</span>${[100,500,1000].map(amount=>`<button class="${selectedBet===amount?"selected":""}" data-bet="${amount}" ${!canBet?"disabled":""}>+${formatChips(amount)}</button>`).join("")}</div>
-      <div class="round-control">${me?.isHost&&revealed?`<button id="nextRound" class="primary">다음 라운드</button>`:revealed?`<p>방장이 다음 라운드를 준비하고 있습니다.</p>`:`<p>${myTurn?"시간 제한 없이 천천히 선택하세요.":"현재 플레이어의 행동을 기다리고 있습니다."}</p>`}</div>
+      <div class="action-main"><button id="checkAction" ${canCheck?"":"disabled"}>Check</button><button id="betAction" ${canBet?"":"disabled"}>Bet ${formatChips(selectedBet)}</button><button id="callAction" ${canCall?"":"disabled"}>Call${callAmount?` ${formatChips(callAmount)}`:""}</button><button id="raiseAction" ${canRaise?"":"disabled"}>Raise +${formatChips(selectedBet)}</button><button id="foldAction" ${canFold?"":"disabled"}>Fold</button><button id="allInAction" ${canAllIn?"":"disabled"}>All In${me?.chips?` ${formatChips(me.chips)}`:""}</button></div>
+      <div class="bet-presets"><span>Bet 금액</span>${[100,500,1000].map(amount=>`<button class="${selectedBet===amount?"selected":""}" data-bet="${amount}" ${!(canBet||canRaise)?"disabled":""}>+${formatChips(amount)}</button>`).join("")}</div>
+      <div class="round-control">${me?.isHost&&revealed&&!currentGame.tournamentWinnerId?`<button id="nextRound" class="primary">다음 라운드</button>`:currentGame.tournamentWinnerId?`<p>최종 우승자가 결정되었습니다.</p>`:revealed?`<p>방장이 다음 라운드를 준비하고 있습니다.</p>`:`<p>${myTurn?"시간 제한 없이 천천히 선택하세요.":"현재 플레이어의 행동을 기다리고 있습니다."}</p>`}</div>
       <p class="status">${esc(status)}</p>
     </section>
   </main>`;
@@ -117,6 +123,9 @@ function renderGame(){
   document.querySelector<HTMLButtonElement>("#checkAction")?.addEventListener("click",()=>currentSocket.emit("indian-poker:check"));
   document.querySelector<HTMLButtonElement>("#betAction")?.addEventListener("click",()=>currentSocket.emit("indian-poker:bet",{amount:selectedBet}));
   document.querySelector<HTMLButtonElement>("#callAction")?.addEventListener("click",()=>currentSocket.emit("indian-poker:call"));
+  document.querySelector<HTMLButtonElement>("#raiseAction")?.addEventListener("click",()=>currentSocket.emit("indian-poker:raise",{amount:selectedBet}));
+  document.querySelector<HTMLButtonElement>("#foldAction")?.addEventListener("click",()=>currentSocket.emit("indian-poker:fold"));
+  document.querySelector<HTMLButtonElement>("#allInAction")?.addEventListener("click",()=>currentSocket.emit("indian-poker:all-in"));
   document.querySelectorAll<HTMLButtonElement>("[data-bet]").forEach(button=>button.addEventListener("click",()=>{selectedBet=Number(button.dataset.bet||100);render();}));
   document.querySelector<HTMLButtonElement>("#nextRound")?.addEventListener("click",()=>currentSocket.emit("indian-poker:next-round"));
 }

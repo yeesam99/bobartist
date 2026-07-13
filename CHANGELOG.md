@@ -1,4 +1,4 @@
-# BobPlatform v0.0.64
+# BobPlatform v0.0.65
 
 - 공통 채팅 전송 후 입력창 포커스 유지
 - `#/admin/chat` 조회 전용 관리자 채팅 모니터 추가
@@ -189,7 +189,7 @@
 - DB 없이 서버 메모리에 최근 이력 보관
 - 관리자 채팅 참여·관전·뮤트·강퇴 기능은 제외
 
-## v0.0.64 - Bob Indian Poker 포커 테이블 UI
+## v0.0.65 - Bob Indian Poker 포커 테이블 UI
 
 - 플레이어가 테이블을 둘러앉는 일반 온라인 포커 레이아웃으로 개편
 - 2~6명 좌석을 상단·좌우·하단에 자동 배치
@@ -210,9 +210,9 @@
 - 방장 카드 공개 시 A~2 순위로 승자를 판정하며, 동점은 공동 승리로 처리합니다.
 - 다음 라운드 카드 재분배를 지원합니다.
 - 기존 공통 채팅과 관리자 방 모니터링 목록에 Indian Poker 방을 연결했습니다.
-- 칩, Ante, Pot, Bet은 v0.0.64에서 구현할 예정입니다.
+- 칩, Ante, Pot, Bet은 v0.0.65에서 구현할 예정입니다.
 
-## v0.0.64 - Bob Indian Poker 칩·Ante·Pot·기본 베팅 및 한 화면 UI
+## v0.0.65 - Bob Indian Poker 칩·Ante·Pot·기본 베팅 및 한 화면 UI
 
 - 방 생성 시 시작 Chips 1,000 / 3,000 / 5,000 / 10,000 선택 추가
 - 라운드 시작 시 Ante 100 자동 차감 및 Pot 생성
@@ -224,3 +224,10 @@
 - 낮은 브라우저 배율 없이 헤더, 테이블, 액션 영역을 한 화면에서 확인 가능
 - Raise, Fold, All In, Main/Side Pot은 다음 버전에서 구현 예정
 
+
+## v0.0.65
+
+- Bob Indian Poker Raise, Fold, All In 구현
+- Main Pot 및 다중 Side Pot 자동 정산
+- Fold/All In 좌석 상태 표시와 최종 우승 판정 추가
+- 기존 BobArtist, Bob Yacht 영향 없음
